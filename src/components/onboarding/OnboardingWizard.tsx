@@ -69,8 +69,7 @@ const CHAT_ENGINE_OPTIONS: Array<{
   id: OnboardingChatEngineId;
   descriptionKey: string;
 }> = [
-  { id: "codex", descriptionKey: "chatEngines.options.codex.description" },
-  { id: "claude", descriptionKey: "chatEngines.options.claude.description" },
+  { id: "mistral", descriptionKey: "chatEngines.options.mistral.description" },
 ];
 
 const STEP_TITLES: Record<
@@ -766,6 +765,9 @@ export function OnboardingWizard() {
     readiness.dependencyReport?.node.found === true &&
     readiness.dependencyReport.codex.found === true &&
     isCodexAuthDeferred(readiness.engineHealth.codex);
+  const chatReadinessRequiresNode = selectedChatEngines.some(
+    (engineId) => engineId === "codex" || engineId === "claude",
+  );
   const busy = Boolean(installing) || workspaceLoading;
   const workspaceConfirmed =
     selectedWorkspaceId !== null && confirmedWorkspaceId === selectedWorkspaceId;
@@ -1313,7 +1315,9 @@ export function OnboardingWizard() {
                     </div>
                   ) : null}
 
-                  {readiness.dependencyReport && !readiness.dependencyReport.node.found ? (
+                  {chatReadinessRequiresNode &&
+                  readiness.dependencyReport &&
+                  !readiness.dependencyReport.node.found ? (
                     <ReadinessDependencyCard
                       label={t("setup:chatReadiness.deps.node")}
                       description={

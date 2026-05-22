@@ -11,6 +11,14 @@ function CodexLogo({ size = 18 }: { size?: number }) {
   );
 }
 
+function MistralLogo({ size = 18 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor">
+      <path d="M4 4h4v4h4V4h4v4h4v12h-4v-8h-4v8H8v-8H4v8H0V8h4V4Z" />
+    </svg>
+  );
+}
+
 /* Anthropic "A" logomark */
 function ClaudeCodeLogo({ size = 18 }: { size?: number }) {
   return (
@@ -81,6 +89,8 @@ export function getHarnessIcon(id: string, size = 16): ReactNode {
   const style = { color: "var(--text-2)", display: "inline-flex", flexShrink: 0 } as const;
 
   switch (id) {
+    case "mistral":
+      return <span style={style}><MistralLogo size={size} /></span>;
     case "codex":
       return <span style={style}><CodexLogo size={size} /></span>;
     case "claude":

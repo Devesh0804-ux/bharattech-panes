@@ -12,7 +12,7 @@ export const ONBOARDING_COMPLETED_KEY = "panes.onboarding.completed.v1";
 export const ONBOARDING_WORKFLOW_KEY = "panes.onboarding.workflow.v1";
 export const ONBOARDING_CHAT_ENGINES_KEY = "panes.onboarding.chatEngines.v1";
 
-const CHAT_ENGINE_ORDER: OnboardingChatEngineId[] = ["codex", "claude"];
+const CHAT_ENGINE_ORDER: OnboardingChatEngineId[] = ["mistral"];
 
 export interface OnboardingInstallLogEntry {
   dep: string;
@@ -102,7 +102,7 @@ function normalizeChatEngines(values: Iterable<unknown>): OnboardingChatEngineId
   const selected = new Set<OnboardingChatEngineId>();
 
   for (const value of values) {
-    if (value === "codex" || value === "claude") {
+    if (value === "mistral") {
       selected.add(value);
     }
   }
@@ -114,7 +114,7 @@ function readChatEngines(): OnboardingChatEngineId[] {
   try {
     const raw = localStorage.getItem(ONBOARDING_CHAT_ENGINES_KEY);
     if (!raw) {
-      return [];
+      return ["mistral"];
     }
 
     const parsed = JSON.parse(raw) as unknown;
@@ -122,9 +122,10 @@ function readChatEngines(): OnboardingChatEngineId[] {
       return [];
     }
 
-    return normalizeChatEngines(parsed);
+    const normalized = normalizeChatEngines(parsed);
+    return normalized.length > 0 ? normalized : ["mistral"];
   } catch {
-    return [];
+    return ["mistral"];
   }
 }
 
@@ -170,7 +171,9 @@ export const useOnboardingStore = create<OnboardingState>((set, get) => ({
   open: false,
   ...readStoredOnboardingState(),
 
-  selectedChatEngines: stored.selectedChatEngines ?? [],
+  selectedChatEngines: stored.selectedChatEngines?.length
+    ? stored.selectedChatEngines
+    : ["mistral"],
   step: "greeting",
   selectedWorkspaceId: null,
   installLog: [],

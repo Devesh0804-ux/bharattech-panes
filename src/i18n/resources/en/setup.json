@@ -13,8 +13,8 @@
         "description": "Browse the agent CLIs Bharattech already supports, install the ones you want, and then choose the workspace where you want to start."
       },
       "chat": {
-        "title": "Chat with Codex / Claude",
-        "description": "Choose Codex, Claude, or both. Bharattech will verify what is ready, help install what is missing, and then send you to a workspace."
+        "title": "Chat with Mistral",
+        "description": "Use the BharatTech Mistral chat engine, verify readiness, and then choose the workspace where you want to start."
       }
     }
   },
@@ -27,8 +27,11 @@
   "chatEngines": {
     "title": "Pick your chat harnesses",
     "subtitle": "Choose which harnesses you want ready inside Bharattech chat.",
-    "helper": "You can select Codex, Claude, or both. If you pick both, the next step checks both runtimes before you continue.",
+    "helper": "Mistral is bundled as the BharatTech chat engine for this app.",
     "options": {
+      "mistral": {
+        "description": "Chat powered by BharatTech Mistral. No local Node.js, Codex, or Claude runtime is required."
+      },
       "codex": {
         "description": "Chat powered by the Codex App Server. May install Node.js and the Codex CLI if they are missing."
       },

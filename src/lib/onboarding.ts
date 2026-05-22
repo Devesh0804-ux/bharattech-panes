@@ -7,6 +7,7 @@ import type {
 } from "../types";
 
 export const CHAT_ENGINE_INSTALL_HARNESS_IDS: Readonly<Record<OnboardingChatEngineId, string>> = {
+  mistral: "mistral",
   codex: "codex",
   claude: "claude-code",
 };
@@ -165,6 +166,10 @@ export function isChatEngineReady(
   dependencyReport: DependencyReport | null,
   engineHealth: Partial<Record<OnboardingChatEngineId, EngineHealth>>,
 ): boolean {
+  if (engineId === "mistral") {
+    return engineHealth.mistral?.available ?? true;
+  }
+
   if (engineId === "codex") {
     return engineHealth.codex?.available ?? true;
   }

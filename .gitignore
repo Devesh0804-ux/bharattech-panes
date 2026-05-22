@@ -38,3 +38,4 @@ openspec/
 
 # Nested repos
 remotion/
+.env

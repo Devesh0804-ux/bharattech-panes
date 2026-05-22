@@ -35,8 +35,6 @@ import {
   requestWindowClose,
   shouldHandleAppShortcutWhileTerminalFocused, toggleWindowFullscreen,
 } from "./lib/windowActions";
-import { UserInfo } from "./components/UserInfo";
-import keycloak from "./lib/keycloak";
 
 const safeArray = <T,>(arr: T[] | null | undefined): T[] =>
   Array.isArray(arr) ? arr : [];
@@ -101,9 +99,6 @@ function resolveChatNotificationBody(
 
 
 export function App() {
-  if (!keycloak.authenticated) {
-    return <div>Loading...</div>;
-  }
   const loadWorkspaces = useWorkspaceStore((s) => s.loadWorkspaces);
   const workspaces = useWorkspaceStore((s) => s.workspaces);
   const loadEngines = useEngineStore((s) => s.load);
@@ -559,10 +554,6 @@ export function App() {
       {customWindowFrame && <CustomWindowFrame frameState={customWindowFrameState} />}
 
       {/* ✅ ADD HERE (top bar or anywhere) */}
-      <div style={{ position: "absolute", top: 10, right: 20 }}>
-        <UserInfo />
-      </div>
-
       <div className="app-shell-body">
         <ThreeColumnLayout />
       </div>

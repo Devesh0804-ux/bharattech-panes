@@ -996,7 +996,7 @@ export interface TerminalGroup {
 // ── Setup / Onboarding ──────────────────────────────────────────────
 
 export type OnboardingWorkflowPreference = "cli" | "chat";
-export type OnboardingChatEngineId = "codex" | "claude";
+export type OnboardingChatEngineId = "mistral" | "codex" | "claude";
 export type OnboardingStep =
   | "greeting"
   | "workflow"
