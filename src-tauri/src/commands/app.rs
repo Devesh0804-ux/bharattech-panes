@@ -117,7 +117,7 @@ fn preview_notification_sound_via_notification(
     let mut notification = app
         .notification()
         .builder()
-        .title("Panes")
+        .title("BharatTech")
         .body("Notification sound preview");
     if sound != "none" && !sound.is_empty() {
         notification = notification.sound(sound);

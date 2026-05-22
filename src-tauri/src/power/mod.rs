@@ -182,13 +182,13 @@ const WINDOWS_KEEP_AWAKE_MARKER: &str = "PANES_KEEP_AWAKE_WINDOWS";
 fn build_linux_gnome_inhibit_args(owner_pid: u32, tail: &Path) -> Vec<OsString> {
     vec![
         OsString::from("--app-id"),
-        OsString::from("Panes"),
+        OsString::from("BharatTech"),
         OsString::from("--inhibit"),
         OsString::from("suspend"),
         OsString::from("--inhibit"),
         OsString::from("idle"),
         OsString::from("--reason"),
-        OsString::from("Keep system awake while Panes is open"),
+        OsString::from("Keep system awake while BharatTech is open"),
         tail.as_os_str().to_os_string(),
         OsString::from(format!("--pid={owner_pid}")),
         OsString::from("-f"),
@@ -1411,8 +1411,8 @@ fn resolve_backend_spec(_profile: &PowerProfile) -> Result<BackendSpec, String> 
             args: vec![
                 OsString::from(what_arg),
                 OsString::from("--mode=block"),
-                OsString::from("--who=Panes"),
-                OsString::from("--why=Keep system awake while Panes is open"),
+                OsString::from("--who=BharatTech"),
+                OsString::from("--why=Keep system awake while BharatTech is open"),
                 tail.into_os_string(),
                 OsString::from(format!("--pid={owner_pid}")),
                 OsString::from("-f"),
@@ -1472,7 +1472,7 @@ fn resolve_display_inhibit_spec() -> Result<Option<BackendSpec>, String> {
     let script = format!(
         "COOKIE=$({gdbus} call --session --dest org.freedesktop.ScreenSaver \
          --object-path /org/freedesktop/ScreenSaver \
-         --method org.freedesktop.ScreenSaver.Inhibit \"Panes\" \"Keep display awake\" 2>/dev/null \
+         --method org.freedesktop.ScreenSaver.Inhibit \"BharatTech\" \"Keep display awake\" 2>/dev/null \
          | tr -dc '0-9') && \
          [ -n \"$COOKIE\" ] && \
          trap \"{gdbus} call --session --dest org.freedesktop.ScreenSaver \
@@ -1523,7 +1523,7 @@ fn build_windows_keep_awake_script(owner_pid: u32, profile: &PowerProfile) -> St
     let flags_expr = flags.join(" -bor ");
 
     let screen_saver_type = if profile.prevent_screen_saver {
-        "public static class PanesScreenSaver { \
+        "public static class BharatTechScreenSaver { \
          [DllImport(\"user32.dll\", SetLastError=true)] \
          public static extern bool SystemParametersInfo(uint action, uint param, IntPtr vparam, uint init); \
          } "
@@ -1533,14 +1533,14 @@ fn build_windows_keep_awake_script(owner_pid: u32, profile: &PowerProfile) -> St
 
     let screen_saver_disable = if profile.prevent_screen_saver {
         "$screenSaverWasActive = (Get-ItemProperty -Path 'HKCU:\\Control Panel\\Desktop' -Name ScreenSaveActive -ErrorAction SilentlyContinue).ScreenSaveActive -eq '1'; \
-         [PanesScreenSaver]::SystemParametersInfo(0x11, 0, [IntPtr]::Zero, 0) | Out-Null; "
+         [BharatTechScreenSaver]::SystemParametersInfo(0x11, 0, [IntPtr]::Zero, 0) | Out-Null; "
     } else {
         ""
     };
 
     let screen_saver_restore = if profile.prevent_screen_saver {
         "$screenSaverRestoreValue = if ($screenSaverWasActive) { 1 } else { 0 }; \
-         [PanesScreenSaver]::SystemParametersInfo(0x11, $screenSaverRestoreValue, [IntPtr]::Zero, 0) | Out-Null; "
+         [BharatTechScreenSaver]::SystemParametersInfo(0x11, $screenSaverRestoreValue, [IntPtr]::Zero, 0) | Out-Null; "
     } else {
         ""
     };
@@ -1550,7 +1550,7 @@ fn build_windows_keep_awake_script(owner_pid: u32, profile: &PowerProfile) -> St
 $ownerPid = {owner_pid}; \
 $signature = @'\
 using System.Runtime.InteropServices; \
-public static class PanesKeepAwakeNative {{ \
+public static class BharatTechKeepAwakeNative {{ \
   [DllImport(\"kernel32.dll\", SetLastError=true)] \
   public static extern uint SetThreadExecutionState(uint esFlags); \
 }} \
@@ -1563,11 +1563,11 @@ $displayRequired = 0x00000002; \
 {screen_saver_disable}\
 try {{ \
   while (Get-Process -Id $ownerPid -ErrorAction SilentlyContinue) {{ \
-    [PanesKeepAwakeNative]::SetThreadExecutionState({flags_expr}) | Out-Null; \
+    [BharatTechKeepAwakeNative]::SetThreadExecutionState({flags_expr}) | Out-Null; \
     Start-Sleep -Seconds 30; \
   }} \
 }} finally {{ \
-  [PanesKeepAwakeNative]::SetThreadExecutionState($continuous) | Out-Null; \
+  [BharatTechKeepAwakeNative]::SetThreadExecutionState($continuous) | Out-Null; \
   {screen_saver_restore}\
 }}"
     )
@@ -2044,7 +2044,7 @@ mod tests {
             .expect("fake commands lock poisoned")
             .insert(
                 10,
-                Some("/Applications/Panes.app/Contents/MacOS/Panes".to_string()),
+                Some("/Applications/BharatTech.app/Contents/MacOS/BharatTech".to_string()),
             );
         process_ops
             .start_markers
@@ -2301,13 +2301,13 @@ mod tests {
             args,
             vec![
                 "--app-id".to_string(),
-                "Panes".to_string(),
+                "BharatTech".to_string(),
                 "--inhibit".to_string(),
                 "suspend".to_string(),
                 "--inhibit".to_string(),
                 "idle".to_string(),
                 "--reason".to_string(),
-                "Keep system awake while Panes is open".to_string(),
+                "Keep system awake while BharatTech is open".to_string(),
                 "/usr/bin/tail".to_string(),
                 "--pid=77".to_string(),
                 "-f".to_string(),
@@ -2356,7 +2356,7 @@ mod tests {
         };
         let args = build_windows_keep_awake_args(77, &profile);
         let script = args.last().unwrap().to_string_lossy().into_owned();
-        assert!(script.contains("PanesScreenSaver"));
+        assert!(script.contains("BharatTechScreenSaver"));
         assert!(script.contains("SystemParametersInfo"));
         assert!(script.contains("ScreenSaveActive"));
         assert!(script

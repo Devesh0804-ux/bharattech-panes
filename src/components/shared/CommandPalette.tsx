@@ -67,6 +67,11 @@ import { canToggleKeepAwake, useKeepAwakeStore } from "../../stores/keepAwakeSto
 import { toast } from "../../stores/toastStore";
 import type { FileTreeEntry, GitBranch, GitStash, GitStatus, HarnessInfo, Repo, SearchResult, Thread, Workspace } from "../../types";
 
+
+const safeArray = (arr) =>
+  Array.isArray(arr) ? arr.filter(Boolean) : [];
+
+
 const FILE_SEARCH_PAGE_SIZE = 500;
 const FILE_SEARCH_PAGE_DELAY_MS = 80;
 
@@ -689,7 +694,7 @@ export function getStaticCommands(
     keywords: ["fork", "codex", "thread", "branch", "duplicate"],
     isAvailable: () => {
       const { threads, activeThreadId } = useThreadStore.getState();
-      const thread = threads.find((th) => th.id === activeThreadId);
+      const thread = safeArray(threads).find((th) => th && th.id === activeThreadId);
       return !!thread && thread.engineId === "codex" && !!thread.engineThreadId;
     },
     action: async ({ close }) => {
@@ -716,7 +721,7 @@ export function getStaticCommands(
     keywords: ["compact", "context", "compress", "codex"],
     isAvailable: () => {
       const { threads, activeThreadId } = useThreadStore.getState();
-      const thread = threads.find((th) => th.id === activeThreadId);
+      const thread = safeArray(threads).find((th) => th && th.id === activeThreadId);
       return !!thread && thread.engineId === "codex" && !!thread.engineThreadId;
     },
     action: async ({ close }) => {
@@ -740,7 +745,7 @@ export function getStaticCommands(
     keywords: ["rollback", "undo", "turns", "codex"],
     isAvailable: () => {
       const { threads, activeThreadId } = useThreadStore.getState();
-      const thread = threads.find((th) => th.id === activeThreadId);
+      const thread = safeArray(threads).find((th) => th && th.id === activeThreadId);
       return !!thread && thread.engineId === "codex" && !!thread.engineThreadId;
     },
     action: ({ openSubFlow }) => {
@@ -756,7 +761,7 @@ export function getStaticCommands(
     keywords: ["review", "code review", "codex", "diff"],
     isAvailable: () => {
       const { threads, activeThreadId } = useThreadStore.getState();
-      const thread = threads.find((th) => th.id === activeThreadId);
+      const thread = safeArray(threads).find((th) => th && th.id === activeThreadId);
       return !!thread && thread.engineId === "codex" && !!thread.engineThreadId;
     },
     action: async ({ close }) => {
@@ -1038,9 +1043,11 @@ export function CommandPalette({ open, onClose }: Props) {
   const bindChatThread = useChatStore((s) => s.setActiveThread);
   const setMessageFocusTarget = useUiStore((s) => s.setMessageFocusTarget);
   const commandPaletteLaunch = useUiStore((s) => s.commandPaletteLaunch);
-  const activeGitRepos = useMemo(() => getActiveGitRepos(repos), [repos]);
+  const activeGitRepos = useMemo(() => getActiveGitRepos(safeArray(repos)), [repos]);
 
-  const activeWorkspace = workspaces.find((workspace) => workspace.id === activeWorkspaceId) ?? null;
+  const activeWorkspace = safeArray(workspaces).find(
+    (workspace) => workspace.id === activeWorkspaceId,
+  ) ?? null;
   const activeRepo = useMemo(
     () => activeGitRepos.find((repo) => repo.id === activeRepoId) ?? activeGitRepos[0] ?? null,
     [activeGitRepos, activeRepoId],
@@ -1052,14 +1059,17 @@ export function CommandPalette({ open, onClose }: Props) {
   const gitStoreActiveRepoPath = useGitStore((s) => s.activeRepoPath);
   const workspaceNameById = useMemo(() => {
     const byId = new Map<string, string>();
-    for (const workspace of workspaces) {
+    for (const workspace of safeArray(workspaces)) {
       byId.set(workspace.id, workspace.name);
     }
     return byId;
   }, [workspaces]);
 
   const workspaceThreads = useMemo(
-    () => threads.filter((t) => t.workspaceId === activeWorkspaceId),
+    () =>
+      safeArray(threads).filter(
+        (t) => t && t.workspaceId === activeWorkspaceId
+      ),
     [threads, activeWorkspaceId],
   );
 
@@ -1069,7 +1079,7 @@ export function CommandPalette({ open, onClose }: Props) {
   );
 
   const activeThread = useMemo(
-    () => threads.find((t) => t.id === activeThreadId),
+    () => safeArray(threads).find((t) => t && t.id === activeThreadId),
     [threads, activeThreadId],
   );
 
@@ -1744,7 +1754,7 @@ export function CommandPalette({ open, onClose }: Props) {
     }
 
     if (mode === "workspace") {
-      const filtered = fuzzyFilter(workspaces, term, (w) => w.name, 10);
+      const filtered = fuzzyFilter(safeArray(workspaces), term, (w) => w.name, 10);
       if (filtered.length === 0) {
         return [{
           label: t("commandPalette.group.workspaces"),
@@ -1899,7 +1909,7 @@ export function CommandPalette({ open, onClose }: Props) {
         return;
       }
 
-      await useThreadStore.getState().refreshThreads(activeWorkspaceId);
+      
       const targetThread = useThreadStore
         .getState()
         .threads.find((thread) => thread.id === result.threadId);
@@ -2434,7 +2444,7 @@ export function CommandPalette({ open, onClose }: Props) {
               <span style={STYLES.itemDescription}>{workspaceName}</span>
             </span>
             <span style={STYLES.itemDescription}>
-              {formatRelativeTime(item.entry.lastActivityAt, i18n.language, {
+              {formatRelativeTime(item.entry.updatedAt, i18n.language, {
                 style: "short-with-suffix",
               })}
             </span>
@@ -2559,7 +2569,7 @@ export function CommandPalette({ open, onClose }: Props) {
         return (
           <div
             key={key}
-            ref={active ? (activeItemRef as React.Ref<HTMLDivElement>) : undefined}
+            ref={active ? (activeItemRef as unknown as React.Ref<HTMLDivElement>) : undefined}
             style={{ ...STYLES.item(false), cursor: "default", color: "var(--text-3)" }}
           >
             <span />

@@ -1,5 +1,5 @@
 (function () {
-  var STORAGE_KEY = "panes-landing-locale";
+  var STORAGE_KEY = "BharatTech-landing-locale";
   var DEFAULT_LOCALE = "en";
   var SUPPORTED_LOCALES = ["en", "pt-BR"];
   var initialized = false;
@@ -7,7 +7,7 @@
   var TRANSLATIONS = {
     en: {
       meta: {
-        title: "Panes | The Agent Development Environment",
+        title: "BharatTech | The Agent Development Environment",
         description:
           "Your agents write the code. You need a cockpit. Chat, terminal, git, and approvals in one native window. Engine-agnostic, open-source, built with Rust.",
       },
@@ -65,7 +65,7 @@
         startupPreset: "Startup preset",
         startupSubtitle: "Configure what happens when you open this workspace",
         defaultView: "Default view",
-        twoPanes: "2 panes",
+        twoBharatTech: "2 panes",
         onePane: "1 pane",
         broadcast: "broadcast",
       },
@@ -85,7 +85,7 @@
           "Open any folder, auto-detect nested git repos. Manage monorepos and multi-service architectures with context-aware chat threads per repo.",
         raceTitle: "Race agents side by side.",
         raceBody:
-          "Launch multiple CLI agents into split panes. Broadcast the same prompt to all of them at once. Optionally give each agent its own git worktree so they never collide.",
+          "Launch multiple CLI agents into split BharatTech. Broadcast the same prompt to all of them at once. Optionally give each agent its own git worktree so they never collide.",
         startupTitle: "Your workspace, ready on open.",
         startupBody:
           "Configure startup presets: default view, terminal groups, agent assignments, split layouts, and broadcast mode. Open a project and everything is already set up.",
@@ -93,7 +93,7 @@
       manifesto: {
         ariaLabel: "Product philosophy",
         textHtml:
-          "IDEs were designed for writing code. But you barely write code anymore. You orchestrate, review, and approve. <strong>Panes is the cockpit for that workflow.</strong>",
+          "IDEs were designed for writing code. But you barely write code anymore. You orchestrate, review, and approve. <strong>BharatTech is the cockpit for that workflow.</strong>",
         orchestrate: "orchestrate",
         review: "review",
         approve: "approve",
@@ -109,12 +109,12 @@
       },
       footer: {
         tagline: "The open-source Agent Development Environment.",
-        copyright: "&copy; 2026 Panes. MIT License.",
+        copyright: "&copy; 2026 BharatTech. MIT License.",
       },
     },
     "pt-BR": {
       meta: {
-        title: "Panes | O Agent Development Environment",
+        title: "BharatTech | O Agent Development Environment",
         description:
           "Os agentes escrevem o código. Você precisa de um cockpit. Chat, terminal, git e aprovações numa janela nativa. Funciona com qualquer engine, open source, feito em Rust.",
       },
@@ -172,8 +172,8 @@
         startupPreset: "Preset de startup",
         startupSubtitle: "Configure o que acontece ao abrir esse workspace",
         defaultView: "View padrão",
-        twoPanes: "2 painéis",
-        onePane: "1 painel",
+        twoBharatTech: "2 painéis",
+        oneBharatTech: "1 painel",
         broadcast: "broadcast",
       },
       integrations: {
@@ -200,7 +200,7 @@
       manifesto: {
         ariaLabel: "Filosofia do produto",
         textHtml:
-          "IDEs foram feitas pra escrever código. Mas hoje você quase não escreve mais. Você orquestra, revisa e aprova. <strong>Panes é o cockpit desse fluxo.</strong>",
+          "IDEs foram feitas pra escrever código. Mas hoje você quase não escreve mais. Você orquestra, revisa e aprova. <strong>BharatTech é o cockpit desse fluxo.</strong>",
         orchestrate: "orquestrar",
         review: "revisar",
         approve: "aprovar",
@@ -216,7 +216,7 @@
       },
       footer: {
         tagline: "O Agent Development Environment open source.",
-        copyright: "&copy; 2026 Panes. Licença MIT.",
+        copyright: "&copy; 2026 BharatTech. Licença MIT.",
       },
     },
   };
@@ -432,8 +432,8 @@
       getValue(nextLocale, "common.editor"),
     ]);
     setTextAll("#product .story-scene:nth-of-type(5) .v-startup-group-badges .v-startup-badge:not(.v-startup-badge-accent)", [
-      getValue(nextLocale, "mock.twoPanes"),
-      getValue(nextLocale, "mock.onePane"),
+      getValue(nextLocale, "mock.twoBharatTech"),
+      getValue(nextLocale, "mock.oneBharatTech"),
     ]);
     setText("#product .story-scene:nth-of-type(5) .v-startup-badge-accent span", getValue(nextLocale, "mock.broadcast"));
 

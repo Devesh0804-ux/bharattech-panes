@@ -307,19 +307,23 @@ function clearNotificationRecord(
 }
 
 function indexNotificationsBySession(
-  notifications: TerminalNotification[],
+  notifications: TerminalNotification[] | null | undefined,
   liveIds: Set<string>,
 ): Record<string, TerminalNotification> {
+  if (!Array.isArray(notifications)) return {};
+
   const indexed: Record<string, TerminalNotification> = {};
+
   for (const notification of notifications) {
-    if (!liveIds.has(notification.sessionId)) {
-      continue;
-    }
+    if (!notification || !liveIds.has(notification.sessionId)) continue;
+
     const current = indexed[notification.sessionId];
+
     if (!current || notification.createdAt > current.createdAt) {
       indexed[notification.sessionId] = notification;
     }
   }
+
   return indexed;
 }
 
@@ -690,7 +694,10 @@ async function closeSessionsSequential(workspaceId: string, sessionIds: string[]
 }
 
 function workspaceRootPath(workspaceId: string): string | null {
-  return useWorkspaceStore.getState().workspaces.find((workspace) => workspace.id === workspaceId)?.rootPath ?? null;
+  const ws = useWorkspaceStore.getState().workspaces;
+  const safeWorkspaces = Array.isArray(ws) ? ws : [];
+
+  return safeWorkspaces.find((workspace) => workspace.id === workspaceId)?.rootPath ?? null;
 }
 
 function resolveSessionStartupCwd(

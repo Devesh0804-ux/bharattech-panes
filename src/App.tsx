@@ -35,6 +35,11 @@ import {
   requestWindowClose,
   shouldHandleAppShortcutWhileTerminalFocused, toggleWindowFullscreen,
 } from "./lib/windowActions";
+import { UserInfo } from "./components/UserInfo";
+import keycloak from "./lib/keycloak";
+
+const safeArray = <T,>(arr: T[] | null | undefined): T[] =>
+  Array.isArray(arr) ? arr : [];
 
 // Debounce guard: when both the JS keydown handler and the native menu-action
 // fire for the same shortcut, only the first one within 100ms takes effect.
@@ -76,8 +81,8 @@ function showRuntimeToast(runtimeToast?: RuntimeToast) {
   }
 }
 
-function resolveAgentDisplayName(engineId: "codex" | "claude"): string {
-  return engineId === "claude" ? "Claude" : "Codex";
+function resolveAgentDisplayName(engineId: string): string {
+  return engineId === "mistral" ? "Mistral" : "BharatTech";
 }
 
 function resolveChatNotificationBody(
@@ -94,7 +99,11 @@ function resolveChatNotificationBody(
   return t("app:notificationSettings.chatNotificationFallbackComplete");
 }
 
+
 export function App() {
+  if (!keycloak.authenticated) {
+    return <div>Loading...</div>;
+  }
   const loadWorkspaces = useWorkspaceStore((s) => s.loadWorkspaces);
   const workspaces = useWorkspaceStore((s) => s.workspaces);
   const loadEngines = useEngineStore((s) => s.load);
@@ -122,7 +131,9 @@ export function App() {
   }, [loadWorkspaces, loadEngines, loadKeepAwake, loadTerminalNotificationSettings]);
 
   useEffect(() => {
-    void refreshAllThreads(workspaces.map((workspace) => workspace.id));
+    void refreshAllThreads(
+      safeArray(workspaces).map((workspace) => workspace.id)
+    );
   }, [workspaces, refreshAllThreads]);
 
   useEffect(() => {
@@ -144,12 +155,13 @@ export function App() {
     let unlisten: (() => void) | undefined;
     void listenThreadUpdated(async ({ workspaceId, thread }) => {
       if (thread) {
-        const applied = applyThreadUpdateLocal(thread);
+        
         const activeThreadId = useThreadStore.getState().activeThreadId;
         if (thread.id === activeThreadId && isCodexSyncRequired(thread)) {
           try {
             const syncedThread = await ipc.syncThreadFromEngine(thread.id);
-            if (useThreadStore.getState().applyThreadUpdateLocal(syncedThread)) {
+            if (syncedThread) {
+              useThreadStore.getState().applyThreadUpdateLocal(syncedThread);
               return;
             }
           } catch (error) {
@@ -157,9 +169,6 @@ export function App() {
           }
           void refreshThreads(workspaceId);
           void refreshArchivedThreads(workspaceId);
-          return;
-        }
-        if (applied) {
           return;
         }
       }
@@ -349,7 +358,9 @@ export function App() {
               const fileState = useFileStore.getState();
               const activeTabId = fileState.activeTabId;
               if (activeTabId) {
-                const activeTab = fileState.tabs.find((tab) => tab.id === activeTabId);
+                const activeTab = safeArray(fileState.tabs).find(
+                  (tab) => tab.id === activeTabId
+                );
                 const editorId =
                   activeTab?.renderMode === "git-diff-editor"
                     ? `${activeTabId}:git-modified`
@@ -377,7 +388,9 @@ export function App() {
           const fileState = useFileStore.getState();
           const activeTabIdH = fileState.activeTabId;
           if (activeTabIdH) {
-            const activeTab = fileState.tabs.find((tab) => tab.id === activeTabIdH);
+            const activeTab = safeArray(fileState.tabs).find(
+              (tab) => tab.id === activeTabIdH
+            );
             const editorId =
               activeTab?.renderMode === "git-diff-editor"
                 ? `${activeTabIdH}:git-modified`
@@ -427,7 +440,9 @@ export function App() {
             if (!ws || (ws.layoutMode !== "split" && ws.layoutMode !== "terminal")) return;
             const activeGroupId = ws.activeGroupId;
             if (!activeGroupId) return;
-            const activeGroup = ws.groups.find((g) => g.id === activeGroupId);
+            const activeGroup = safeArray(ws.groups).find(
+              (g) => g.id === activeGroupId
+            );
             if (!activeGroup) return;
             const isBroadcastingActiveGroup = ws.broadcastGroupId === activeGroupId;
             if (!isBroadcastingActiveGroup && collectSessionIds(activeGroup.root).length < 2) return;
@@ -542,9 +557,16 @@ export function App() {
       }${customWindowFrameState.isFullscreen ? " app-shell-custom-frame-fullscreen" : ""}`}
     >
       {customWindowFrame && <CustomWindowFrame frameState={customWindowFrameState} />}
+
+      {/* ✅ ADD HERE (top bar or anywhere) */}
+      <div style={{ position: "absolute", top: 10, right: 20 }}>
+        <UserInfo />
+      </div>
+
       <div className="app-shell-body">
         <ThreeColumnLayout />
       </div>
+
       <CommandPalette open={commandPaletteOpen} onClose={closeCommandPalette} />
       <PowerSettingsModal />
       <TerminalNotificationSettingsModal />

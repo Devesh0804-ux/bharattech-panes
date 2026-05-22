@@ -1,4 +1,4 @@
-mod commands;
+﻿mod commands;
 mod config;
 mod db;
 mod engines;
@@ -37,6 +37,8 @@ use state::{AppState, TurnManager};
 #[cfg(target_os = "macos")]
 use tauri::menu::{AboutMetadata, MenuItem, PredefinedMenuItem, SubmenuBuilder};
 use tauri::{image::Image, menu::Menu, Emitter, Manager, RunEvent, WebviewWindowBuilder};
+#[cfg(any(windows, target_os = "linux"))]
+use tauri_plugin_deep_link::DeepLinkExt;
 use terminal::TerminalManager;
 
 pub fn maybe_handle_cli_subcommand() -> anyhow::Result<bool> {
@@ -94,88 +96,22 @@ pub fn run() {
     };
 
     let app = tauri::Builder::default()
-        .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_deep_link::init()) 
+        .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_notification::init())
-        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .manage(app_state)
         .menu(move |handle| build_app_menu(handle, app_locale))
         .setup(|app| {
-            let main_window_config = app
-                .config()
-                .app
-                .windows
-                .iter()
-                .find(|window| window.label == "main")
-                .or_else(|| app.config().app.windows.first())
-                .cloned()
-                .ok_or_else(|| anyhow::anyhow!("main window config not found"))?;
-
-            #[cfg(any(target_os = "linux", target_os = "windows"))]
-            let main_window_config = {
-                let mut main_window_config = main_window_config;
-                main_window_config.decorations = false;
-                main_window_config
-            };
-
-            let main_window = WebviewWindowBuilder::from_config(app.handle(), &main_window_config)?
-                .enable_clipboard_access()
-                .build()?;
-            #[cfg(not(target_os = "linux"))]
-            let _ = &main_window;
-
-            #[cfg(target_os = "linux")]
+            #[cfg(any(windows, target_os = "linux"))]
             {
-                if let Ok(icon) = Image::from_bytes(include_bytes!("../icons/icon.png")) {
-                    if let Err(error) = main_window.set_icon(icon) {
-                        log::warn!("failed to apply linux window icon: {error}");
-                    }
-                }
+                app.deep_link().register_all()?;
             }
-
-            #[cfg(target_os = "linux")]
-            tauri::async_runtime::spawn_blocking(|| {
-                match linux_appimage::ensure_appimage_desktop_integration() {
-                    Ok(status) => {
-                        if !matches!(
-                            status,
-                            linux_appimage::AppImageIntegrationStatus::SkippedNotAppImage
-                        ) {
-                            log::info!("linux AppImage desktop integration status: {status:?}");
-                        }
-                    }
-                    Err(error) => {
-                        log::warn!("failed to ensure linux AppImage desktop integration: {error}");
-                    }
-                }
-            });
-
-            let handle = app.handle().clone();
-            let resource_dir = app.path().resource_dir().ok();
-            let state = app.state::<AppState>().inner().clone();
-            if let Err(error) =
-                tauri::async_runtime::block_on(state.notifications.start(handle.clone()))
-            {
-                log::warn!("failed to start terminal notification ingress: {error}");
-            }
-            state.engines.set_resource_dir(resource_dir);
-            tauri::async_runtime::spawn(run_codex_runtime_bridge(handle.clone(), state.clone()));
-            app.on_menu_event(move |_app, event| {
-                let id = event.id().as_ref();
-                match id {
-                    "toggle-sidebar" | "toggle-git-panel" | "toggle-focus-mode"
-                    | "toggle-fullscreen" | "toggle-search" | "toggle-terminal"
-                    | "close-window" | "edit-undo" | "edit-redo" | "edit-cut" | "edit-copy"
-                    | "edit-paste" | "edit-select-all" => {
-                        let _ = handle.emit("menu-action", id);
-                    }
-                    _ => {}
-                }
-            });
             Ok(())
         })
+
         .invoke_handler(tauri::generate_handler![
             commands::app::get_app_locale,
             commands::app::set_app_locale,
@@ -871,7 +807,7 @@ fn build_app_menu(handle: &tauri::AppHandle, locale: &str) -> tauri::Result<Menu
                 version: Some(env!("CARGO_PKG_VERSION").to_string()),
                 authors: Some(vec!["Wygor Alves".to_string()]),
                 comments: Some(strings.about_comments.to_string()),
-                copyright: Some("Copyright © 2026 Wygor Alves".to_string()),
+                copyright: Some("Copyright Â© 2026 Wygor Alves".to_string()),
                 license: Some("MIT".to_string()),
                 website: Some("https://github.com/wygoralves/panes".to_string()),
                 website_label: Some("GitHub".to_string()),
@@ -977,3 +913,5 @@ fn build_app_menu(handle: &tauri::AppHandle, locale: &str) -> tauri::Result<Menu
     #[allow(unreachable_code)]
     Menu::with_items(handle, &[])
 }
+
+

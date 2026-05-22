@@ -1,5 +1,257 @@
-import { invoke } from "@tauri-apps/api/core";
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { invoke as tauriInvoke } from "@tauri-apps/api/core";
+import { listen as tauriListen, type UnlistenFn } from "@tauri-apps/api/event";
+import { isTauriRuntime } from "./runtime";
+
+const isTauri = isTauriRuntime();
+
+const mockCapabilities = {
+  permissionModes: [],
+  sandboxModes: [],
+  approvalDecisions: [],
+};
+
+function mockModel(
+  id: string,
+  displayName: string,
+  defaultReasoningEffort = "medium",
+) {
+  return {
+    id,
+    displayName,
+    description: "",
+    hidden: false,
+    isDefault: defaultReasoningEffort === "medium",
+    inputModalities: ["text"],
+    supportsPersonality: false,
+    defaultReasoningEffort,
+    supportedReasoningEfforts: [],
+  };
+}
+
+function buildMockChatResponse(message: string): string {
+  const prompt = message.trim();
+  const normalized = prompt.toLowerCase();
+
+  if (
+    normalized.includes("attendance") ||
+    normalized.includes("check in") ||
+    normalized.includes("check-in") ||
+    normalized.includes("check out") ||
+    normalized.includes("check-out")
+  ) {
+    return [
+      "Here is a practical full-stack attendance system blueprint for check-in and check-out.",
+      "",
+      "Core features:",
+      "- Employee login with role-based access for employee, manager, and admin.",
+      "- Daily check-in and check-out with timestamps, status, and optional location/device metadata.",
+      "- Attendance history with filters by employee, team, date range, late arrivals, and missing check-outs.",
+      "- Admin dashboard for employee management, leave calendars, attendance corrections, and reports.",
+      "",
+      "Suggested stack:",
+      "- Frontend: React + TypeScript.",
+      "- Backend: Node.js + Express, or Tauri commands if this stays desktop-first.",
+      "- Database: MongoDB with users, attendanceRecords, teams, and holidays collections.",
+      "- Auth: JWT/session auth with password hashing and protected routes.",
+      "",
+      "MongoDB attendance record shape:",
+      "```ts",
+      "type AttendanceRecord = {",
+      "  userId: string;",
+      "  date: string;",
+      "  checkInAt?: string;",
+      "  checkOutAt?: string;",
+      "  status: 'present' | 'late' | 'absent' | 'incomplete';",
+      "  totalMinutes?: number;",
+      "  notes?: string;",
+      "};",
+      "```",
+      "",
+      "Backend endpoints:",
+      "- `POST /api/attendance/check-in` creates today's record or rejects duplicate check-ins.",
+      "- `POST /api/attendance/check-out` closes today's open record and calculates total minutes.",
+      "- `GET /api/attendance/me?from=&to=` returns the signed-in user's records.",
+      "- `GET /api/admin/attendance?userId=&from=&to=` returns manager/admin reports.",
+      "- `PATCH /api/admin/attendance/:id` allows approved corrections.",
+      "",
+      "Check-in/check-out logic:",
+      "```ts",
+      "async function checkIn(userId: string) {",
+      "  const date = new Date().toISOString().slice(0, 10);",
+      "  const existing = await Attendance.findOne({ userId, date });",
+      "  if (existing?.checkInAt) throw new Error('Already checked in');",
+      "  return Attendance.findOneAndUpdate(",
+      "    { userId, date },",
+      "    { $set: { checkInAt: new Date().toISOString(), status: 'present' } },",
+      "    { upsert: true, new: true }",
+      "  );",
+      "}",
+      "",
+      "async function checkOut(userId: string) {",
+      "  const date = new Date().toISOString().slice(0, 10);",
+      "  const record = await Attendance.findOne({ userId, date });",
+      "  if (!record?.checkInAt) throw new Error('Check in first');",
+      "  if (record.checkOutAt) throw new Error('Already checked out');",
+      "  const checkOutAt = new Date();",
+      "  const totalMinutes = Math.round((+checkOutAt - +new Date(record.checkInAt)) / 60000);",
+      "  record.checkOutAt = checkOutAt.toISOString();",
+      "  record.totalMinutes = totalMinutes;",
+      "  return record.save();",
+      "}",
+      "```",
+      "",
+      "Frontend screens:",
+      "- Employee home: current status, Check In/Check Out button, and today's timeline.",
+      "- My attendance: calendar/table view with total hours and missing actions.",
+      "- Admin dashboard: employee selector, date filters, editable records, and exports.",
+      "- Settings: shift start time, grace period, holidays, and timezone.",
+      "",
+      "Next implementation step: create the attendance model and API routes first, then wire the React dashboard to those routes.",
+    ].join("\n");
+  }
+
+  return [
+    `I received your prompt: "${prompt || "empty message"}"`,
+    "",
+    "This browser build is running with the local fallback engine, so I can provide a structured draft response without calling the desktop sidecar.",
+    "",
+    "A good next step is to break the request into:",
+    "- data model",
+    "- backend actions/API",
+    "- frontend screens",
+    "- validation and error states",
+    "- tests and persistence",
+  ].join("\n");
+}
+
+const mockResponses = {
+  check_dependencies: {
+    node: { found: true },
+    codex: { found: true },
+  },
+
+  list_engines: [
+    {
+      id: "mistral",
+      name: "Mistral",
+      models: [
+        mockModel("mistral-large", "Mistral Large", "medium"),
+      ],
+      capabilities: mockCapabilities,
+    }
+  ],
+};
+
+// ✅ SAFE INVOKE
+export async function invoke<T = any>(cmd: string, args?: any): Promise<T> {
+  if (!isTauri) {
+    switch (cmd) {
+      case "list_engines":
+        return mockResponses.list_engines as T;
+
+      case "engine_health":
+        return {
+          id: args?.engineId || "mistral",
+          available: true,
+          warnings: [],
+          checks: [],
+          fixes: [],
+        } as T;
+
+      case "create_thread":
+        return {
+          id: crypto.randomUUID(), // ✅ THIS FIXES EVERYTHING
+        } as T;
+
+      case "chat_send":
+      case "send_message": {
+        console.log("🔥 chat_send called", args);
+
+        if (!args.threadId) {
+          console.error("❌ threadId missing");
+          return {} as T;
+        }
+
+        try {
+          const res = await fetch("http://127.0.0.1:5000/api/chat", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              message: args.message,
+              threadId: args.threadId,
+              engineId: args.engineId,
+              modelId: args.modelId,
+            }),
+          });
+
+          console.log("🔥 status:", res.status);
+
+          if (!res.ok) {
+            const text = await res.text();
+            console.error("API ERROR:", text);
+
+            return { reply: "⚠️ Server error, try again" } as T;
+          }
+
+          const data = await res.json();
+          console.log("🔥 response:", data);
+
+          emit(args.threadId, {
+            type: "TextDelta",
+            content: data.reply,
+          });
+
+          emit(args.threadId, {
+            type: "TurnCompleted",
+          });
+
+        } catch (err) {
+            console.error("❌ chat_send error:", err);
+
+            emit(args.threadId, {
+              type: "TextDelta",
+              content: "⚠️ Backend unavailable. Please try again.",
+            });
+
+            emit(args.threadId, {
+              type: "TurnCompleted",
+            });
+          }
+
+        return {} as T;
+      }
+
+      case "get_thread_messages":
+      case "get_thread_messages_window":
+        return {
+          messages: [],
+          nextCursor: null,
+        } as T;
+
+      default:
+        return {} as T;
+    }
+  }
+
+  // ✅ REAL TAURI CALL
+  return tauriInvoke(cmd, args);
+}
+
+// ✅ SAFE LISTEN
+export async function listen<T = any>(
+  event: string,
+  handler: (event: { payload: T }) => void
+): Promise<UnlistenFn> {
+  if (!isTauri) {
+    return () => {};
+  }
+
+  return tauriListen(event, handler);
+}
+
+
 import { normalizeDependencyReport } from "./dependencies";
 import type { AppLocale } from "./locale";
 import type {
@@ -62,6 +314,23 @@ import type {
   WorkspaceGitSelectionStatus,
   Workspace
 } from "../types";
+
+// 🔥 LOCAL STREAM EMITTER (FIX FOR emit ERROR)
+const listeners = new Map<string, (event: any) => void>();
+
+function emit(threadId: string, event: any) {
+  const cb = listeners.get(threadId);
+  if (cb) cb(event);
+}
+
+// 🔥 CONNECT LISTENER
+export function listenThreadEventsLocal(
+  threadId: string,
+  callback: (event: any) => void
+) {
+  listeners.set(threadId, callback);
+  return () => listeners.delete(threadId);
+}
 
 export const ipc = {
   getAppLocale: () => invoke<AppLocale>("get_app_locale"),
@@ -192,6 +461,7 @@ export const ipc = {
       engineThreadId,
       modelId,
     }),
+    
   createThread: (
     workspaceId: string,
     repoId: string | null,
@@ -276,26 +546,19 @@ export const ipc = {
   listCodexSkills: (cwd: string) =>
     invoke<CodexSkill[]>("list_codex_skills", { cwd }),
   listCodexApps: () => invoke<CodexApp[]>("list_codex_apps"),
-  sendMessage: (
-    threadId: string,
-    message: string,
-    modelId?: string | null,
-    reasoningEffort?: string | null,
-    attachments?: ChatAttachment[] | null,
-    inputItems?: ChatInputItem[] | null,
-    planMode?: boolean | null,
-    clientTurnId?: string | null,
-  ) =>
-    invoke<string>("send_message", {
-      threadId,
-      message,
-      modelId: modelId ?? null,
-      reasoningEffort: reasoningEffort ?? null,
-      attachments: attachments ?? null,
-      inputItems: inputItems ?? null,
-      planMode: planMode ?? null,
-      clientTurnId: clientTurnId ?? null,
-    }),
+  chatSend: (args: {
+    threadId: string;
+    message: string;
+    modelId?: string | null;
+    reasoningEffort?: string | null;
+    attachments?: ChatAttachment[] | null;
+    inputItems?: ChatInputItem[] | null;
+    planMode?: boolean | null;
+    clientTurnId?: string | null;
+  }) => {
+    return invoke("send_message", args);
+  },
+
   steerMessage: (
     threadId: string,
     message: string,
@@ -323,8 +586,10 @@ export const ipc = {
   cancelTurn: (threadId: string) => invoke<void>("cancel_turn", { threadId }),
   respondApproval: (threadId: string, approvalId: string, response: ApprovalResponse) =>
     invoke<void>("respond_to_approval", { threadId, approvalId, response }),
-  getThreadMessages: (threadId: string) =>
-    invoke<Message[]>("get_thread_messages", { threadId }),
+  getThreadMessages: async (threadId: string) => {
+    const result = await invoke<Message[] | MessageWindow>("get_thread_messages", { threadId });
+    return Array.isArray(result) ? result : result?.messages ?? [];
+  },
   getThreadMessagesWindow: (
     threadId: string,
     cursor?: MessageWindowCursor | null,
@@ -344,6 +609,7 @@ export const ipc = {
       workspaceId,
       query
     }),
+    
   getGitStatus: (repoPath: string) => invoke<GitStatus>("get_git_status", { repoPath }),
   getFileDiff: (repoPath: string, filePath: string, staged: boolean) =>
     invoke<GitDiffPreview>("get_file_diff", { repoPath, filePath, staged }),
@@ -528,6 +794,10 @@ export async function listenThreadEvents(
   threadId: string,
   onEvent: (event: StreamEvent) => void
 ): Promise<UnlistenFn> {
+  if (!isTauri) {
+    return listenThreadEventsLocal(threadId, onEvent);
+  }
+
   return listen<StreamEvent>(`stream-event-${threadId}`, ({ payload }) => onEvent(payload));
 }
 
@@ -550,7 +820,7 @@ export interface ThreadUpdatedEvent {
 export interface ChatTurnFinishedEvent {
   threadId: string;
   workspaceId: string;
-  engineId: "codex" | "claude";
+  engineId: "mistral";
   threadTitle: string;
   status: "completed" | "interrupted" | "error";
   preview?: string | null;
@@ -651,7 +921,7 @@ export async function writeCommandToNewSession(
 ): Promise<void> {
   const FALLBACK_TIMEOUT_MS = 3000;
   const POST_OUTPUT_DELAY_MS = 50;
-
+  
   return new Promise<void>((resolve) => {
     let settled = false;
     let unlisten: (() => void) | undefined;

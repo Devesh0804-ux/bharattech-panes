@@ -31,6 +31,7 @@ import { canToggleKeepAwake, useKeepAwakeStore } from "../../stores/keepAwakeSto
 import { useTerminalNotificationSettingsStore } from "../../stores/terminalNotificationSettingsStore";
 import { toast } from "../../stores/toastStore";
 import { ipc } from "../../lib/ipc";
+import { isTauriRuntime } from "../../lib/runtime";
 import { formatRelativeTime } from "../../lib/formatters";
 import {
   emitTerminalAcceleratedRenderingChanged,
@@ -57,6 +58,8 @@ const MAX_VISIBLE_THREADS = 8;
 const LEGACY_SCAN_DEPTH_STORAGE_KEY = "panes.workspace.scanDepth";
 const LEGACY_SCAN_DEPTH_MIN = 0;
 const LEGACY_SCAN_DEPTH_MAX = 12;
+
+
 
 function readLegacyDefaultScanDepth(): number | undefined {
   const stored = window.localStorage.getItem(LEGACY_SCAN_DEPTH_STORAGE_KEY);
@@ -119,16 +122,28 @@ function SidebarContent({ onPin }: { onPin?: () => void }) {
   const openTerminalNotificationSettings = useTerminalNotificationSettingsStore((s) => s.openModal);
   const hasUpdate = updateStatus === "available" && !updateSnoozed;
   const keepAwakeAvailable = canToggleKeepAwake(keepAwakeState);
+  const safeWorkspaces = Array.isArray(workspaces) ? workspaces : [];
+  const safeThreads = Array.isArray(threads) ? threads : [];
+  const safeActiveWorkspaceId = activeWorkspaceId ?? null;
+  const projects = useMemo(() => {
+    if (!Array.isArray(safeWorkspaces)) return [];
 
-  const projects = useMemo<ProjectGroup[]>(
-    () =>
-      workspaces.map((ws) => ({
-        workspace: ws,
-        threads: threads.filter((t) => t.workspaceId === ws.id),
-      })),
-    [workspaces, threads],
+    return safeWorkspaces.map((ws) => ({
+      workspace: ws,
+      threads: Array.isArray(safeThreads)
+        ? safeThreads.filter((t) => t && t.workspaceId === ws.id)
+        : [],
+    }));
+  }, [safeWorkspaces, safeThreads]);
+
+  const safeArray = (arr) =>
+    Array.isArray(arr) ? arr.filter(Boolean) : [];
+
+  const workspaceIds = useMemo(
+    () => (Array.isArray(workspaces) ? workspaces : []).map((workspace) => workspace?.id),
+    [workspaces]
   );
-  const workspaceIds = useMemo(() => workspaces.map((workspace) => workspace.id), [workspaces]);
+  
 
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>(() =>
     normalizeSidebarCollapsedState(workspaceIds, activeWorkspaceId, {}, null),
@@ -184,7 +199,7 @@ function SidebarContent({ onPin }: { onPin?: () => void }) {
           !cancelled &&
           getTerminalAcceleratedRenderingPreferenceVersion() === requestVersion
         ) {
-          setTerminalAcceleratedRendering(enabled);
+          setTerminalAcceleratedRendering(enabled ?? true);
         }
       })
       .catch(() => undefined);
@@ -227,29 +242,46 @@ function SidebarContent({ onPin }: { onPin?: () => void }) {
   }, [activeWorkspaceId, refreshArchivedThreads]);
 
   async function onOpenFolder() {
-    const selected = await open({ directory: true, multiple: false });
-    if (!selected || Array.isArray(selected)) return;
-    await openWorkspace(selected, readLegacyDefaultScanDepth());
+    try {
+      if (isTauriRuntime()) {
+        const selected = await open({ directory: true, multiple: false });
+        if (!selected || Array.isArray(selected)) return;
+
+        await openWorkspace(selected, readLegacyDefaultScanDepth());
+        return;
+      }
+
+      if ("showDirectoryPicker" in window) {
+        const dirHandle = await (window as any).showDirectoryPicker();
+        if (!dirHandle?.name) return;
+        await openWorkspace(dirHandle.name, 3);
+        return;
+      }
+
+      toast.error("Folder picking is only available in the desktop app.");
+    } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") return;
+      toast.error(`Folder open failed: ${String(err)}`);
+    }
   }
 
-  async function onSelectThread(thread: Thread) {
+  async function onSelectThread(thread: Thread | null) {
+    if (!thread?.id) return;
+    
     if (activeView !== "chat") setActiveView("chat");
+
     if (thread.workspaceId !== activeWorkspaceId) {
       await setActiveWorkspace(thread.workspaceId);
     }
-    if (thread.repoId) {
-      setActiveRepo(thread.repoId);
-    } else {
-      setActiveRepo(null, { remember: false });
-    }
-    setActiveThread(thread.id);
-    await bindChatThread(thread.id);
+
+    setActiveThread(thread?.id);
+    await bindChatThread(thread?.id);
   }
 
   async function onSelectProject(wsId: string) {
     if (activeView !== "chat") setActiveView("chat");
     setCollapsed(
-      Object.fromEntries(projects.map((p) => [p.workspace.id, p.workspace.id !== wsId]))
+      Object.fromEntries(projects.map((p) => [p.workspace?.id, p.workspace?.id !== wsId]))
     );
     await setActiveWorkspace(wsId);
   }
@@ -289,8 +321,8 @@ function SidebarContent({ onPin }: { onPin?: () => void }) {
 
   async function executeArchiveThread(thread: Thread) {
     setArchiveThreadPrompt(null);
-    const wasActive = thread.id === activeThreadId;
-    await removeThread(thread.id);
+    const wasActive = thread?.id === activeThreadId;
+    await removeThread(thread?.id);
     if (wasActive) {
       setActiveThread(null);
       await bindChatThread(null);
@@ -298,11 +330,12 @@ function SidebarContent({ onPin }: { onPin?: () => void }) {
   }
 
   async function onRestoreWorkspace(workspace: Workspace) {
-    await restoreWorkspace(workspace.id);
+    await restoreWorkspace(workspace?.id);
   }
 
-  async function onRestoreThread(thread: Thread) {
-    await restoreThread(thread.id);
+  async function onRestoreThread(thread: Thread | null) {
+    if (!thread?.id) return; // ✅ FIX
+    await restoreThread(thread?.id);
   }
 
   async function onLocaleSelect(locale: AppLocale) {
@@ -310,7 +343,7 @@ function SidebarContent({ onPin }: { onPin?: () => void }) {
 
     try {
       const savedLocale = await ipc.setAppLocale(locale);
-      await i18n.changeLanguage(savedLocale);
+      await i18n.changeLanguage(savedLocale ?? locale);
       toast.info(t("common:language.changed"));
     } catch {
       toast.error(t("app:sidebar.languageFailed"));
@@ -322,8 +355,11 @@ function SidebarContent({ onPin }: { onPin?: () => void }) {
 
     try {
       const saved = await ipc.setTerminalAcceleratedRendering(nextValue);
-      setTerminalAcceleratedRendering(saved);
-      emitTerminalAcceleratedRenderingChanged(saved);
+
+      const finalValue = saved ?? nextValue;
+
+      setTerminalAcceleratedRendering(finalValue);
+      emitTerminalAcceleratedRenderingChanged(finalValue);
     } catch {
       toast.error(t("app:sidebar.terminalAcceleratedRenderingFailed"));
     }
@@ -423,7 +459,7 @@ function SidebarContent({ onPin }: { onPin?: () => void }) {
                 color: "var(--text-3)",
               }}
             >
-              Panes
+              BharatTech
             </span>
             <button
               type="button"
@@ -442,12 +478,16 @@ function SidebarContent({ onPin }: { onPin?: () => void }) {
             className="sb-new-thread-btn"
             style={{ margin: 0 }}
             onClick={() => {
-              const activeProject = projects.find(
-                (p) => p.workspace.id === activeWorkspaceId,
-              );
-              if (activeProject) {
-                void onCreateProjectThread(activeProject.workspace);
-              }
+              const activeProject =
+                Array.isArray(projects) && activeWorkspaceId
+                  ? projects.find((p) => p?.workspace?.id === activeWorkspaceId)
+                  : null;
+
+              if (!activeProject || !activeProject.workspace) return; // ✅ FIX
+
+              if (!activeProject?.workspace?.id) return;
+
+              void onCreateProjectThread(activeProject.workspace);
             }}
           >
             <Plus size={14} strokeWidth={2.2} />
@@ -459,7 +499,9 @@ function SidebarContent({ onPin }: { onPin?: () => void }) {
             type="button"
             className={`sb-open-project-btn${activeView === "harnesses" ? " sb-btn-active" : ""}`}
             style={{ margin: 0 }}
-            onClick={() => setActiveView(activeView === "harnesses" ? "chat" : "harnesses")}
+            onClick={() => {
+              alert("Agents not available in web mode yet");
+            }}
           >
             <Terminal size={13} strokeWidth={2} />
             {t("app:sidebar.agents")}
@@ -484,7 +526,7 @@ function SidebarContent({ onPin }: { onPin?: () => void }) {
           </button>
         </div>
 
-        {projects.length === 0 ? (
+        {(Array.isArray(projects) ? projects.length : 0) === 0 ? (
           <div className="sb-empty">
             {t("app:sidebar.noProjects")}
             <br />
@@ -492,26 +534,26 @@ function SidebarContent({ onPin }: { onPin?: () => void }) {
           </div>
         ) : (
           projects.map((project) => {
-            const isActiveProject = project.workspace.id === activeWorkspaceId;
-            const isCollapsed = collapsed[project.workspace.id] ?? false;
+            const isActiveProject = project.workspace?.id === activeWorkspaceId;
+            const isCollapsed = collapsed[project.workspace?.id] ?? false;
             const projectName = getWorkspaceLabel(project.workspace);
-            const isShowingAll = showAll[project.workspace.id] ?? false;
+            const isShowingAll = showAll[project.workspace?.id] ?? false;
             const visibleThreads = isShowingAll
               ? project.threads
-              : project.threads.slice(0, MAX_VISIBLE_THREADS);
-            const hasMore = project.threads.length > MAX_VISIBLE_THREADS;
+              : safeArray(project.threads).slice(0, MAX_VISIBLE_THREADS);
+            const hasMore = safeArray(project.threads).length > MAX_VISIBLE_THREADS;
 
             return (
-              <div key={project.workspace.id} style={{ marginBottom: 2 }}>
+              <div key={project.workspace?.id ?? Math.random()} style={{ marginBottom: 2 }}>
                 {/* Project header */}
                 <button
                   type="button"
                   className={`sb-project ${isActiveProject ? "sb-project-active" : ""}`}
                   onClick={() => {
                     if (isActiveProject) {
-                      toggleCollapse(project.workspace.id);
+                      toggleCollapse(project.workspace?.id);
                     } else {
-                      void onSelectProject(project.workspace.id);
+                      void onSelectProject(project.workspace?.id);
                     }
                   }}
                 >
@@ -529,15 +571,15 @@ function SidebarContent({ onPin }: { onPin?: () => void }) {
                   />
                   <span className="sb-project-name">{projectName}</span>
 
-                  {project.threads.length > 0 && (
+                  {safeArray(project.threads).length > 0 && (
                     <span className="sb-project-count">
-                      {project.threads.length}
+                      {safeArray(project.threads).length}
                     </span>
                   )}
 
                   <WorkspaceMoreMenu
                     workspace={project.workspace}
-                    onOpenSettings={() => openWorkspaceSettings(project.workspace.id)}
+                    onOpenSettings={() => openWorkspaceSettings(project.workspace?.id)}
                     onArchive={() => onDeleteWorkspace(project.workspace)}
                   />
                 </button>
@@ -545,15 +587,15 @@ function SidebarContent({ onPin }: { onPin?: () => void }) {
                 {/* Threads */}
                 {!isCollapsed && (
                   <div style={{ display: "flex", flexDirection: "column", gap: 1, marginTop: 1 }}>
-                    {project.threads.length === 0 ? (
+                    {safeArray(project.threads).length === 0 ? (
                       <div className="sb-no-threads">{t("app:sidebar.noThreads")}</div>
                     ) : (
                       <>
                         {visibleThreads.map((thread, i) => {
-                          const isActive = thread.id === activeThreadId;
+                          const isActive = thread?.id === activeThreadId;
                           return (
                             <button
-                              key={thread.id}
+                              key={thread?.id ?? Math.random()}
                               type="button"
                               className={`sb-thread sb-thread-animate ${isActive ? "sb-thread-active" : ""}`}
                               style={{ animationDelay: `${i * 20}ms` }}
@@ -590,12 +632,12 @@ function SidebarContent({ onPin }: { onPin?: () => void }) {
                             onClick={() =>
                               setShowAll((prev) => ({
                                 ...prev,
-                                [project.workspace.id]: true,
+                                [project.workspace?.id]: true,
                               }))
                             }
                           >
                             {t("app:sidebar.showMore", {
-                              count: project.threads.length - MAX_VISIBLE_THREADS,
+                              count: safeArray(project.threads).length - MAX_VISIBLE_THREADS,
                             })}
                           </button>
                         )}
@@ -623,14 +665,15 @@ function SidebarContent({ onPin }: { onPin?: () => void }) {
             <Archive size={11} style={{ flexShrink: 0, opacity: 0.6 }} />
             <span style={{ flex: 1, textAlign: "left" }}>{t("app:sidebar.archived")}</span>
             <span className="sb-project-count" style={{ fontSize: 9 }}>
-              {archivedWorkspaces.length + archivedThreads.length}
+              {(Array.isArray(archivedWorkspaces) ? archivedWorkspaces.length : 0) +
+              (Array.isArray(archivedThreads) ? archivedThreads.length : 0)}
             </span>
           </button>
 
           {archivedOpen && (
             <div style={{ display: "flex", flexDirection: "column", gap: 2, paddingBottom: 4 }}>
-              {archivedWorkspaces.map((workspace) => (
-                <div key={workspace.id} className="sb-archived-item">
+              {(Array.isArray(archivedWorkspaces) ? archivedWorkspaces : []).map((workspace) => (
+                <div key={workspace?.id} className="sb-archived-item">
                   <FolderGit2 size={12} style={{ flexShrink: 0, color: "var(--text-3)" }} />
                   <span
                     style={{
@@ -655,8 +698,8 @@ function SidebarContent({ onPin }: { onPin?: () => void }) {
                 </div>
               ))}
 
-              {archivedThreads.map((thread) => (
-                <div key={thread.id} className="sb-archived-item">
+              {(Array.isArray(archivedThreads) ? archivedThreads : []).map((thread) => (
+                <div key={thread?.id} className="sb-archived-item">
                   <MessageSquare size={12} style={{ flexShrink: 0, color: "var(--text-3)" }} />
                   <span
                     style={{
@@ -681,7 +724,8 @@ function SidebarContent({ onPin }: { onPin?: () => void }) {
                 </div>
               ))}
 
-              {archivedWorkspaces.length === 0 && archivedThreads.length === 0 && (
+              {(!Array.isArray(archivedWorkspaces) || archivedWorkspaces.length === 0) &&
+                (!Array.isArray(archivedThreads) || archivedThreads.length === 0) && (
                 <div className="sb-no-threads">{t("app:sidebar.nothingArchived")}</div>
               )}
             </div>
@@ -1014,7 +1058,9 @@ function CollapsedRail({
   flyoutVisible?: boolean;
 }) {
   const { t } = useTranslation("app");
-  const projects = useWorkspaceStore((s) => s.workspaces);
+  const projects = useWorkspaceStore((s) =>
+    Array.isArray(s.workspaces) ? s.workspaces : []
+  );
   const activeWorkspaceId = useWorkspaceStore((s) => s.activeWorkspaceId);
   const setActiveWorkspace = useWorkspaceStore((s) => s.setActiveWorkspace);
   const setActiveRepo = useWorkspaceStore((s) => s.setActiveRepo);
@@ -1025,7 +1071,10 @@ function CollapsedRail({
   const setActiveView = useUiStore((s) => s.setActiveView);
 
   async function onNewThread() {
-    const activeProject = projects.find((p) => p.id === activeWorkspaceId);
+    const activeProject =
+      Array.isArray(projects) && activeWorkspaceId
+        ? projects.find((p) => p?.id === activeWorkspaceId)
+        : null;
     if (!activeProject) return;
     setActiveRepo(null, { remember: false });
     const createdThreadId = await createThread({

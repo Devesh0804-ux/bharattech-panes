@@ -38,8 +38,8 @@ export function WorkspaceSettingsPage() {
   const storeRescan = useWorkspaceStore((s) => s.rescanWorkspace);
   const settingsWorkspaceId = useUiStore((s) => s.settingsWorkspaceId);
   const setActiveView = useUiStore((s) => s.setActiveView);
-
-  const workspace = workspaces.find((w) => w.id === settingsWorkspaceId) ?? null;
+  const safeWorkspaces = Array.isArray(workspaces) ? workspaces : [];
+  const workspace = safeWorkspaces.find(w => w.id === settingsWorkspaceId) ?? null;
   const isActive = workspace?.id === activeWorkspaceId;
 
   const [section, setSection] = useState<Section>("general");

@@ -1274,7 +1274,7 @@ pub fn inspect_init_repo(path: &str) -> anyhow::Result<GitInitRepoStatusDto> {
     let target_path = fs::canonicalize(path).context("failed to resolve repository path")?;
     let discovered_repo = match Repository::discover(&target_path) {
         Ok(repo) => repo,
-        Err(error) if error.code() == ErrorCode::NotFound => {
+        Err(error) if matches!(error.code(), ErrorCode::NotFound | ErrorCode::Owner) => {
             return Ok(GitInitRepoStatusDto {
                 can_initialize: true,
                 blocking_repo_path: None,

@@ -742,7 +742,7 @@ fn node_unavailable_details_for_platform(
 
     match (platform, resolution.login_shell_executable.as_ref()) {
         ("macos", Some(shell_path)) => format!(
-            "Node.js was found in your login shell at `{}`, but Panes does not see it in the app PATH. This is common when launching the app from Finder on macOS. App PATH: `{}`",
+            "Node.js was found in your login shell at `{}`, but BharatTech does not see it in the app PATH. This is common when launching the app from Finder on macOS. App PATH: `{}`",
             shell_path.display(),
             path_preview
         ),
@@ -751,7 +751,7 @@ fn node_unavailable_details_for_platform(
             path_preview
         ),
         (_, Some(shell_path)) => format!(
-            "Node.js was found in your login shell at `{}`, but Panes does not see it in the app PATH. App PATH: `{}`",
+            "Node.js was found in your login shell at `{}`, but BharatTech does not see it in the app PATH. App PATH: `{}`",
             shell_path.display(),
             path_preview
         ),
@@ -775,12 +775,12 @@ fn node_fix_commands_for_platform(
                         "launchctl setenv PATH \"{}:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin\"",
                         bin_dir.display()
                     ));
-                    fixes.push("open -a Panes".to_string());
+                    fixes.push("open -a BharatTech".to_string());
                 }
             }
             None => {
                 fixes.push("/bin/zsh -lic 'command -v node && node --version'".to_string());
-                fixes.push("open -a Panes".to_string());
+                fixes.push("open -a BharatTech".to_string());
             }
         }
 
@@ -792,7 +792,7 @@ fn node_fix_commands_for_platform(
         return vec![
             "where node".to_string(),
             "echo %PATH%".to_string(),
-            "Ensure your Node.js install directory is present in PATH, then restart Panes."
+            "Ensure your Node.js install directory is present in PATH, then restart BharatTech."
                 .to_string(),
         ];
     }
@@ -1699,6 +1699,6 @@ mod tests {
 
         assert!(fixes.contains(&"where node".to_string()));
         assert!(fixes.contains(&"echo %PATH%".to_string()));
-        assert!(fixes.iter().any(|fix| fix.contains("restart Panes")));
+        assert!(fixes.iter().any(|fix| fix.contains("restart BharatTech")));
     }
 }

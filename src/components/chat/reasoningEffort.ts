@@ -14,13 +14,17 @@ export function resolveReasoningEffortForModel(
   preferredEffort: string | null | undefined,
 ): string | null {
   const normalizedPreferred = normalizeReasoningEffort(preferredEffort);
+
   if (!model) {
     return normalizedPreferred;
   }
 
+  // ✅ FIX: ensure array always exists
+  const supported = model.supportedReasoningEfforts ?? [];
+
   if (
     normalizedPreferred &&
-    model.supportedReasoningEfforts.some(
+    supported.some(
       (option) => option.reasoningEffort === normalizedPreferred,
     )
   ) {
@@ -28,18 +32,20 @@ export function resolveReasoningEffortForModel(
   }
 
   const normalizedDefault = normalizeReasoningEffort(model.defaultReasoningEffort);
+
   if (
     normalizedDefault &&
-    model.supportedReasoningEfforts.some(
+    supported.some(
       (option) => option.reasoningEffort === normalizedDefault,
     )
   ) {
     return normalizedDefault;
   }
 
-  const firstSupported = model.supportedReasoningEfforts.find((option) =>
+  const firstSupported = supported.find((option) =>
     normalizeReasoningEffort(option.reasoningEffort),
   );
+
   if (firstSupported) {
     return firstSupported.reasoningEffort;
   }

@@ -18,44 +18,114 @@ interface EngineState {
   applyRuntimeUpdate: (event: EngineRuntimeUpdatedEvent) => void;
 }
 
+const MISTRAL_ONLY_ENGINES: EngineInfo[] = [
+  {
+    id: "mistral",
+    name: "Mistral",
+    capabilities: {
+      permissionModes: [],
+      sandboxModes: [],
+      approvalDecisions: [],
+    },
+    models: [
+      {
+        id: "mistral-large",
+        displayName: "Mistral Large",
+        description: "",
+        hidden: false,
+        isDefault: true,
+        inputModalities: ["text"],
+        supportsPersonality: false,
+        defaultReasoningEffort: "medium",
+        supportedReasoningEfforts: [],
+      },
+    ],
+  },
+];
+
 let pendingHealthRequests: Partial<Record<string, Promise<EngineHealth | null>>> = {};
 
 export const useEngineStore = create<EngineState>((set, get) => ({
   engines: [],
-  health: {},
+  health: {
+    mistral: {
+      id: "mistral",
+      available: true,
+      warnings: [],
+      checks: [],
+      fixes: [],
+    },
+  },
   healthLoading: {},
   loading: false,
   loadedOnce: false,
   load: async () => {
     set({ loading: true, error: undefined });
+
     try {
-      const engines = await ipc.listEngines();
+      let engines: EngineInfo[] = await ipc.listEngines();
+
+      const isInvalid =
+        !Array.isArray(engines) ||
+        engines.length === 0 ||
+        !engines.every(
+          (engine) =>
+            engine.id === "mistral" &&
+            Array.isArray(engine.models) &&
+            engine.models.length > 0,
+        );
+
+      if (isInvalid) {
+        engines = MISTRAL_ONLY_ENGINES;
+      }
+
+      engines = engines
+        .filter((engine) => engine.id === "mistral")
+        .map((engine: any) => ({
+          ...engine,
+          name: engine.name || "Mistral",
+          capabilities: engine.capabilities ?? MISTRAL_ONLY_ENGINES[0].capabilities,
+          models: Array.isArray(engine.models)
+            ? engine.models
+                .filter((model: any) => model.id === "mistral-large")
+                .map((model: any) => ({
+                  id: model.id,
+                  displayName: model.displayName || "Mistral Large",
+                  description: model.description ?? "",
+                  hidden: model.hidden ?? false,
+                  isDefault: true,
+                  inputModalities: model.inputModalities ?? ["text"],
+                  supportsPersonality: model.supportsPersonality ?? false,
+                  defaultReasoningEffort: model.defaultReasoningEffort ?? "medium",
+                  supportedReasoningEfforts: model.supportedReasoningEfforts ?? [],
+                }))
+            : [],
+        }))
+        .filter((engine) => engine.models.length > 0);
+
+      if (engines.length === 0) {
+        engines = MISTRAL_ONLY_ENGINES;
+      }
+
       set({
         engines,
         loading: false,
         loadedOnce: true,
-        error: undefined,
       });
     } catch (error) {
-      const message = String(error);
+      console.error("Engine load failed:", error);
       set({
+        engines: MISTRAL_ONLY_ENGINES,
         loading: false,
         loadedOnce: true,
-        error: message,
-        health: {
-          codex: {
-            id: "codex",
-            available: false,
-            details: `Engine discovery failed: ${message}`,
-            warnings: [],
-            checks: ["codex --version", "command -v codex"],
-            fixes: [],
-          },
-        },
       });
     }
   },
   ensureHealth: async (engineId, options) => {
+    if (engineId !== "mistral") {
+      return null;
+    }
+
     const existing = get().health[engineId];
     if (existing && !options?.force) {
       return existing;
@@ -122,6 +192,9 @@ export const useEngineStore = create<EngineState>((set, get) => ({
       const nextHealth = { ...state.health };
       const nextHealthLoading = { ...state.healthLoading };
       for (const report of reports) {
+        if (report.id !== "mistral") {
+          continue;
+        }
         nextHealth[report.id] = report;
         delete nextHealthLoading[report.id];
       }
@@ -133,6 +206,10 @@ export const useEngineStore = create<EngineState>((set, get) => ({
     }),
   applyRuntimeUpdate: ({ engineId, protocolDiagnostics }) =>
     set((state) => {
+      if (engineId !== "mistral") {
+        return state;
+      }
+
       const current = state.health[engineId];
       const nextHealth: EngineHealth = current
         ? {

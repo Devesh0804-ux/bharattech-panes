@@ -1383,7 +1383,7 @@ fn build_terminal_env_config_for(is_windows: bool, inputs: TerminalEnvInputs) ->
         Some(value) => Some(value.to_string()),
     };
     let colorterm = inputs.colorterm.or_else(|| Some("truecolor".to_string()));
-    let term_program = inputs.term_program.or_else(|| Some("Panes".to_string()));
+    let term_program = inputs.term_program.or_else(|| Some("BharatTech".to_string()));
     let term_program_version = inputs
         .term_program_version
         .or_else(|| Some(env!("CARGO_PKG_VERSION").to_string()));
@@ -1525,7 +1525,7 @@ fn apply_terminal_env(cmd: &mut CommandBuilder, config: &TerminalEnvConfig) {
     if let Some(value) = config.snapshot.term_program_version.as_deref() {
         cmd.env("TERM_PROGRAM_VERSION", value);
     }
-    cmd.env("PANES_TERM_PROGRAM", "Panes");
+    cmd.env("PANES_TERM_PROGRAM", "BharatTech");
     cmd.env("PANES_TERM_PROGRAM_VERSION", env!("CARGO_PKG_VERSION"));
     if let Some(value) = config.snapshot.home.as_deref() {
         cmd.env("HOME", value);

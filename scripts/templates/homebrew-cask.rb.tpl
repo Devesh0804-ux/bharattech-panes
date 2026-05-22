@@ -1,18 +1,18 @@
-cask "panes" do
+cask "bharattech" do
   version "__VERSION__"
   sha256 "__SHA256__"
 
   url "__URL__"
-  name "Panes"
+  name "BharatTech"
   desc "Local-first cockpit for AI-assisted coding"
-  homepage "https://github.com/wygoralves/panes"
+  homepage "https://github.com/BharatTech/bharattech"
 
-  app "Panes.app"
+  app "BharatTech.app"
 
   postflight do
     # Best-effort friction reduction for unsigned / unnotarized builds.
     system_command "/usr/bin/xattr",
-      args: ["-dr", "com.apple.quarantine", "#{appdir}/Panes.app"]
+      args: ["-dr", "com.apple.quarantine", "#{appdir}/BharatTech.app"]
   end
 
   zap trash: [

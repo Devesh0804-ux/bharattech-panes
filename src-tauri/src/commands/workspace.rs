@@ -39,27 +39,7 @@ pub async fn open_workspace(
     let scan_depth = normalize_scan_depth(scan_depth);
     run_db(state.db.clone(), move |db| {
         let workspace = db::workspaces::upsert_workspace(db, &path, scan_depth)?;
-        let repos =
-            multi_repo::scan_git_repositories(&workspace.root_path, workspace.scan_depth as usize)?;
-        let repo_paths = repos
-            .iter()
-            .map(|repo| repo.path.clone())
-            .collect::<Vec<_>>();
-        db::repos::reconcile_workspace_repos(db, &workspace.id, &repo_paths)?;
-        let selection_configured =
-            db::workspaces::is_git_repo_selection_configured(db, &workspace.id)?;
-
-        for repo in repos {
-            let _ = db::repos::upsert_repo(
-                db,
-                &workspace.id,
-                &repo.name,
-                &repo.path,
-                &repo.default_branch,
-                !selection_configured,
-            );
-        }
-
+        sync_workspace_git_repos(db, &workspace)?;
         Ok(workspace)
     })
     .await
@@ -83,6 +63,8 @@ pub async fn get_repos(
     workspace_id: String,
 ) -> Result<Vec<RepoDto>, String> {
     run_db(state.db.clone(), move |db| {
+        let workspace = load_workspace(db, &workspace_id)?;
+        sync_workspace_git_repos(db, &workspace)?;
         db::repos::get_repos(db, &workspace_id)
     })
     .await
@@ -345,6 +327,61 @@ pub async fn get_workspace_file_tree_page(
 
 fn err_to_string(error: impl std::fmt::Display) -> String {
     error.to_string()
+}
+
+fn repo_path_key(path: &str) -> String {
+    std::fs::canonicalize(path)
+        .unwrap_or_else(|_| std::path::PathBuf::from(path))
+        .to_string_lossy()
+        .replace('\\', "/")
+        .to_lowercase()
+}
+
+fn discover_workspace_git_repos(
+    workspace: &WorkspaceDto,
+) -> anyhow::Result<Vec<multi_repo::DetectedRepo>> {
+    let mut repos =
+        multi_repo::scan_git_repositories(&workspace.root_path, workspace.scan_depth as usize)?;
+    if let Some(containing_repo) =
+        multi_repo::discover_containing_git_repository(&workspace.root_path)?
+    {
+        let containing_key = repo_path_key(&containing_repo.path);
+        if !repos
+            .iter()
+            .any(|repo| repo_path_key(&repo.path) == containing_key)
+        {
+            repos.insert(0, containing_repo);
+        }
+    }
+
+    Ok(repos)
+}
+
+fn sync_workspace_git_repos(
+    db: &crate::db::Database,
+    workspace: &WorkspaceDto,
+) -> anyhow::Result<()> {
+    let repos = discover_workspace_git_repos(workspace)?;
+    let repo_paths = repos
+        .iter()
+        .map(|repo| repo.path.clone())
+        .collect::<Vec<_>>();
+    db::repos::reconcile_workspace_repos(db, &workspace.id, &repo_paths)?;
+    let selection_configured =
+        db::workspaces::is_git_repo_selection_configured(db, &workspace.id)?;
+
+    for repo in repos {
+        db::repos::upsert_repo(
+            db,
+            &workspace.id,
+            &repo.name,
+            &repo.path,
+            &repo.default_branch,
+            !selection_configured,
+        )?;
+    }
+
+    Ok(())
 }
 
 fn load_workspace(db: &crate::db::Database, workspace_id: &str) -> anyhow::Result<WorkspaceDto> {

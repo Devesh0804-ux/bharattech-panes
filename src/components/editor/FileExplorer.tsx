@@ -164,8 +164,11 @@ interface DeletePending {
 export function FileExplorer() {
   const { t } = useTranslation("app");
   const activeWorkspaceId = useWorkspaceStore((s) => s.activeWorkspaceId);
-  const activeWorkspace = useWorkspaceStore((s) =>
-    s.workspaces.find((w) => w.id === activeWorkspaceId),
+  const workspaces = useWorkspaceStore((s) => s.workspaces);
+  const safeWorkspaces = Array.isArray(workspaces) ? workspaces : [];
+
+  const activeWorkspace = safeWorkspaces.find(
+    (w) => w.id === activeWorkspaceId
   );
   const rootPath = activeWorkspace?.rootPath ?? "";
 
@@ -236,10 +239,12 @@ export function FileExplorer() {
 
       try {
         const entries = await ipc.listDir(requestSignature.rootPath, dirPath);
-        if (!isCurrentExplorerLoad(requestSignature, loadSignatureRef.current)) return;
+
+        const safeEntries = Array.isArray(entries) ? entries : [];
+
         setDirContents((prev) => {
           const next = new Map(prev);
-          next.set(dirPath, entries);
+          next.set(dirPath, safeEntries);
           return next;
         });
       } catch (err) {
@@ -360,7 +365,10 @@ export function FileExplorer() {
         });
       }
 
-      const children = dirContents.get(dirPath);
+      const rawChildren = dirContents.get(dirPath);
+
+      const children = Array.isArray(rawChildren) ? rawChildren : [];
+
       if (!children) return;
 
       for (const entry of children) {

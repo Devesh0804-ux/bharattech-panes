@@ -342,13 +342,13 @@ fn poll_power_source_windows() -> Result<PowerSourceStatus, String> {
             public uint BatteryLifeTime;
             public uint BatteryFullLifeTime;
         }
-        public static class PanesPowerStatus {
+        public static class BharatTechPowerStatus {
             [DllImport("kernel32.dll", SetLastError=true)]
             public static extern bool GetSystemPowerStatus(out SYSTEM_POWER_STATUS status);
         }
 '@
         $status = New-Object SYSTEM_POWER_STATUS
-        if ([PanesPowerStatus]::GetSystemPowerStatus([ref]$status)) {
+        if ([BharatTechPowerStatus]::GetSystemPowerStatus([ref]$status)) {
             "$($status.ACLineStatus)|$($status.BatteryLifePercent)"
         } else {
             "error"

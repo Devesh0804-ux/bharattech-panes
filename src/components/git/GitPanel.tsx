@@ -35,6 +35,8 @@ import { GitCommitsView } from "./GitCommitsView";
 import { GitStashView } from "./GitStashView";
 import { GitWorktreesView } from "./GitWorktreesView";
 
+const safeArray = (arr: any[]) => Array.isArray(arr) ? arr : [];
+
 const GIT_WATCHER_REFRESH_DEBOUNCE_MS_CHANGES = 550;
 const GIT_WATCHER_REFRESH_DEBOUNCE_MS_BACKGROUND = 1100;
 
@@ -132,11 +134,14 @@ export function GitPanel({ mode = "docked", onPin }: Props) {
   }, [moreMenuOpen, closeMoreMenu]);
 
   const controlledRepos = useMemo(
-    () => repos.filter((repo) => repo.isActive),
+    () => safeArray(repos).filter((repo) => repo.isActive),
     [repos],
   );
   const activeWorkspaceRootPath = useMemo(
-    () => workspaces.find((workspace) => workspace.id === activeWorkspaceId)?.rootPath ?? null,
+    () =>
+      safeArray(workspaces).find(
+        (workspace) => workspace.id === activeWorkspaceId,
+      )?.rootPath ?? null,
     [activeWorkspaceId, workspaces],
   );
 
@@ -220,7 +225,7 @@ export function GitPanel({ mode = "docked", onPin }: Props) {
     setLocalError(undefined);
     try {
       const results = await Promise.allSettled(
-        controlledRepos.map((r) => fetchRemote(r.path)),
+        safeArray(controlledRepos).map((r) => fetchRemote(r.path)),
       );
       const failed = results.filter((r) => r.status === "rejected").length;
       if (failed > 0) {
@@ -272,10 +277,10 @@ export function GitPanel({ mode = "docked", onPin }: Props) {
   // Auto-activate all repos when none are active
   useEffect(() => {
     if (!activeWorkspaceId || repos.length === 0) return;
-    const anyActive = repos.some((repo) => repo.isActive);
+    const anyActive = safeArray(repos).some((repo) => repo.isActive);
     if (anyActive) return;
 
-    const allIds = repos.map((repo) => repo.id);
+    const allIds = safeArray(repos).map((repo) => repo.id);
     void setWorkspaceGitActiveRepos(activeWorkspaceId, allIds).then(() => {
       setActiveRepo(allIds[0] ?? null);
     });
@@ -605,7 +610,9 @@ export function GitPanel({ mode = "docked", onPin }: Props) {
                 setActiveRepoPath(wtPath);
                 if (activeRepo) setMainRepoPath(activeRepo.path);
               } else {
-                const selectedRepo = controlledRepos.find((repo) => repo.id === value);
+                const selectedRepo = safeArray(controlledRepos).find(
+                  (repo) => repo.id === value,
+                );
                 setActiveRepo(value);
                 setMainRepoPath(null);
                 setActiveRepoPath(selectedRepo?.path ?? null);
@@ -645,7 +652,7 @@ export function GitPanel({ mode = "docked", onPin }: Props) {
       {effectiveRepo ? (
         <>
           {activeView === "changes" && (
-            controlledRepos.length > 1 ? (
+            safeArray(controlledRepos).length > 1 ? (
               <MultiRepoChangesView
                 repos={controlledRepos}
                 onError={setLocalError}

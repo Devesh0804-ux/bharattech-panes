@@ -361,7 +361,7 @@ pub async fn send_message(
         codex_external_sandbox_active,
     ) {
         return Err(
-            "Codex read-only and workspace-write sandbox overrides are unavailable while Panes is using external sandbox mode. Clear the override or restore local Codex sandboxing first.".to_string(),
+            "Codex read-only and workspace-write sandbox overrides are unavailable while BharatTech is using external sandbox mode. Clear the override or restore local Codex sandboxing first.".to_string(),
         );
     }
 

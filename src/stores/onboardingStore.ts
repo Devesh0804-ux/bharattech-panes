@@ -164,9 +164,13 @@ function describeInstallTarget(
   };
 }
 
+const stored = readStoredOnboardingState();
+
 export const useOnboardingStore = create<OnboardingState>((set, get) => ({
   open: false,
   ...readStoredOnboardingState(),
+
+  selectedChatEngines: stored.selectedChatEngines ?? [],
   step: "greeting",
   selectedWorkspaceId: null,
   installLog: [],
@@ -198,7 +202,7 @@ export const useOnboardingStore = create<OnboardingState>((set, get) => ({
     set({ selectedChatEngines: normalized });
   },
   toggleChatEngine: (engine) => {
-    const current = get().selectedChatEngines;
+    const current = get().selectedChatEngines ?? [];
     const next = current.includes(engine)
       ? current.filter((entry) => entry !== engine)
       : [...current, engine];

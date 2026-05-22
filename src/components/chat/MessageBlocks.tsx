@@ -78,6 +78,68 @@ function isBlockLike(value: unknown): value is { type: string } {
   return typeof value === "object" && value !== null && "type" in value;
 }
 
+interface GeneratedActionSummary {
+  type?: unknown;
+  path?: unknown;
+}
+
+function parseGeneratedActionsPayload(raw: string): GeneratedActionSummary[] | null {
+  const trimmed = raw.trim();
+  const candidates = [trimmed];
+  const jsonStart = trimmed.indexOf("{");
+  const jsonEnd = trimmed.lastIndexOf("}");
+  if (jsonStart >= 0 && jsonEnd > jsonStart) {
+    candidates.push(trimmed.slice(jsonStart, jsonEnd + 1));
+  }
+
+  for (const candidate of candidates) {
+    try {
+      const parsed = JSON.parse(candidate) as unknown;
+      if (
+        typeof parsed === "object" &&
+        parsed !== null &&
+        !Array.isArray(parsed) &&
+        Array.isArray((parsed as { actions?: unknown }).actions)
+      ) {
+        return (parsed as { actions: GeneratedActionSummary[] }).actions;
+      }
+    } catch {
+      // Keep the original assistant text when it is normal prose or partial JSON.
+    }
+  }
+
+  return null;
+}
+
+function formatGeneratedActionsText(raw: string): string {
+  const actions = parseGeneratedActionsPayload(raw);
+  if (!actions || actions.length === 0) {
+    return raw;
+  }
+
+  const filePaths = actions
+    .map((action) => (typeof action.path === "string" ? action.path.trim() : ""))
+    .filter((path) => path.length > 0);
+
+  const visiblePaths = filePaths.slice(0, 20);
+  const hiddenCount = Math.max(0, filePaths.length - visiblePaths.length);
+  const actionLabel = actions.length === 1 ? "action" : "actions";
+
+  if (visiblePaths.length === 0) {
+    return `Generated a structured project update with ${actions.length} ${actionLabel}.`;
+  }
+
+  return [
+    `Generated a structured project update with ${actions.length} ${actionLabel}.`,
+    "",
+    "**Files**",
+    ...visiblePaths.map((path) => `- \`${path}\``),
+    ...(hiddenCount > 0 ? [`- ...and ${hiddenCount} more`] : []),
+    "",
+    "Open the files from Explorer or review them from the Changes panel.",
+  ].join("\n");
+}
+
 function CodeBlockCopyButton({ content }: { content: string }) {
   const [copied, setCopied] = useState(false);
   const handleCopy = useCallback(() => {
@@ -1289,12 +1351,15 @@ function renderSingleBlock(
     const textContent = String(block.content ?? "");
     const isLastBlock = index === safeBlocks.length - 1;
     const isStreamingText = status === "streaming" && isLastBlock;
+    const displayTextContent = isStreamingText
+      ? textContent
+      : formatGeneratedActionsText(textContent);
 
     if (isStreamingText) {
       return (
         <MarkdownContent
           key={blockKey}
-          content={textContent}
+          content={displayTextContent}
           streaming
           className="prose"
           style={{ fontSize: 13, padding: "6px 14px" }}
@@ -1305,7 +1370,7 @@ function renderSingleBlock(
     return (
       <MarkdownContent
         key={blockKey}
-        content={textContent}
+        content={displayTextContent}
         className="prose"
         style={{ fontSize: 13, padding: "6px 14px" }}
       />
@@ -1313,52 +1378,6 @@ function renderSingleBlock(
   }
 
   /* ── Code ── */
-  if (block.type === "code") {
-    const lang = String(block.language ?? "text");
-    return (
-      <div
-        key={blockKey}
-        style={{
-          borderRadius: "var(--radius-sm)",
-          border: "1px solid var(--border)",
-          overflow: "hidden",
-          background: "var(--code-bg)",
-        }}
-      >
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 6,
-            padding: "6px 12px",
-            borderBottom: "1px solid var(--border)",
-            fontSize: 11,
-            color: "var(--text-3)",
-            fontFamily: '"JetBrains Mono", monospace',
-          }}
-        >
-          <FileCode2 size={12} style={{ opacity: 0.5 }} />
-          <span style={{ flex: 1 }}>{block.filename || lang}</span>
-          <CodeBlockCopyButton content={String(block.content ?? "")} />
-        </div>
-        <pre
-          style={{
-            margin: 0,
-            padding: "12px 14px",
-            fontSize: 12.5,
-            lineHeight: 1.6,
-            fontFamily: '"JetBrains Mono", monospace',
-            whiteSpace: "pre-wrap",
-            wordBreak: "break-word",
-            overflow: "auto",
-            maxHeight: 400,
-          }}
-        >
-          <code className={`language-${lang}`}>{String(block.content ?? "")}</code>
-        </pre>
-      </div>
-    );
-  }
 
   /* ── Diff ── */
   if (block.type === "diff") {

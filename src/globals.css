@@ -5453,7 +5453,7 @@ button, input, textarea, select {
   opacity: 0.5;
 }
 
-/* Panes */
+/* Session panes */
 .wss-panes {
   padding: 6px 8px 8px;
   display: flex;

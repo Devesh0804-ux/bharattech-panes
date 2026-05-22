@@ -7,6 +7,8 @@ import { useEngineStore } from "../../stores/engineStore";
 import { getHarnessIcon } from "../shared/HarnessLogos";
 import type { EngineHealth, EngineInfo, EngineModel } from "../../types";
 
+const safeArray = (arr: any[]) => Array.isArray(arr) ? arr : [];
+
 /* ── Props ── */
 
 interface ModelPickerProps {
@@ -111,7 +113,7 @@ export function ModelPicker({
     }
     wasOpenRef.current = true;
 
-    for (const engine of engines) {
+    for (const engine of safeArray(engines)){
       const engineHealth = health[engine.id];
       if (!engineHealth) {
         void ensureEngineHealth(engine.id);
@@ -167,17 +169,30 @@ export function ModelPicker({
   }, [disabled]);
 
   // Resolve current selection for trigger label
-  const currentEngine = engines.find((e) => e.id === selectedEngineId) ?? engines[0];
+  const safeEngines = safeArray(engines);
+
+  const currentEngine =
+    safeEngines.find((e) => e.id === selectedEngineId) ||
+    safeEngines[0] ||
+    null;
+  const currentModels = safeArray(currentEngine?.models);
+
   const currentModel =
-    currentEngine?.models.find((m) => m.id === selectedModelId) ??
-    currentEngine?.models.find((m) => !m.hidden) ??
+    currentModels.find((m) => m.id === selectedModelId) ||
+    currentModels.find((m) => !m.hidden) ||
     null;
 
   // Active engine in popover (for browsing)
-  const browsingEngine = engines.find((e) => e.id === activeEngineId) ?? engines[0];
-  const browsingModels = browsingEngine?.models ?? [];
-  const activeModels = browsingModels.filter((m) => !m.hidden);
-  const legacyModels = browsingModels.filter((m) => m.hidden);
+  const browsingEngine =
+  safeEngines.find((e) => e.id === activeEngineId) ||
+  safeEngines[0] ||
+  null;
+
+  const browsingModels = Array.isArray(browsingEngine?.models)
+    ? browsingEngine.models
+    : [];
+  const activeModels = browsingModels;
+  const legacyModels = safeArray(browsingModels).filter((m) => m.hidden);
 
   function handleModelSelect(engineId: string, modelId: string) {
     onEngineModelChange(engineId, modelId);
@@ -186,7 +201,7 @@ export function ModelPicker({
 
   // Build trigger label
   const triggerLabel = currentModel
-    ? formatModelName(currentModel.displayName)
+    ? formatModelName(currentModel.displayName || currentModel.id || "model")
     : currentEngine?.name ?? t("modelPicker.selectModel");
 
   /* ── Trigger ── */
@@ -237,7 +252,17 @@ export function ModelPicker({
                   key={engine.id}
                   type="button"
                   className={`mp-rail-engine${isActive ? " mp-rail-engine-active" : ""}`}
-                  onClick={() => setActiveEngineId(engine.id)}
+                  onClick={() => {
+                    setActiveEngineId(engine.id);
+
+                    const firstModel =
+                      engine.models?.find(m => !m.hidden)?.id ||
+                      engine.models?.[0]?.id;
+
+                    if (firstModel) {
+                      onEngineModelChange(engine.id, firstModel);
+                    }
+                  }}
                 >
                   <span className="mp-rail-engine-icon">
                     {getHarnessIcon(engine.id, 15)}
@@ -352,7 +377,7 @@ function ModelRow({
         <div className="mp-model-info">
           <div className="mp-model-name-row">
             <span className="mp-model-name">
-              {formatModelName(model.displayName)}
+              {formatModelName(model.displayName || model.id || "model" || model.id || "model")}
             </span>
             {model.isDefault && (
               <span className="mp-model-default">{t("modelPicker.default")}</span>

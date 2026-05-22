@@ -166,8 +166,8 @@ function shouldPruneRustTopLevelArtifact(name) {
   return (
     name === "_up_" ||
     name === "sidecar-dist" ||
-    name === "com.panes.app.helper.keepawake" ||
-    /^Panes(?:HelperRegistrar)?(?:$|[.-])/.test(name) ||
+    name === "com.bharattech.app.helper.keepawake" ||
+    /^BharatTech(?:HelperRegistrar)?(?:$|[.-])/.test(name) ||
     /^(?:lib)?agent_workspace_lib(?:$|[.-])/.test(name)
   );
 }

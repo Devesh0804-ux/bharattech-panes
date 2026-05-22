@@ -69,8 +69,8 @@ impl Default for GeneralConfig {
     fn default() -> Self {
         Self {
             theme: "dark".to_string(),
-            default_engine: "codex".to_string(),
-            default_model: "gpt-5.4".to_string(),
+            default_engine: "mistral".to_string(),
+            default_model: "mistral-large".to_string(),
             locale: None,
             terminal_accelerated_rendering: None,
             chat_notifications: None,
@@ -304,20 +304,20 @@ mod tests {
     #[test]
     fn missing_locale_field_uses_none() {
         let raw = r#"
-[general]
-theme = "dark"
-default_engine = "codex"
-default_model = "gpt-5.4"
+        [general]
+        theme = "dark"
+        default_engine = "mistral"
+        default_model = "mistral-large"
 
-[ui]
-sidebar_width = 260
-git_panel_width = 380
-font_size = 13
+        [ui]
+        sidebar_width = 260
+        git_panel_width = 380
+        font_size = 13
 
-[debug]
-persist_engine_event_logs = false
-max_action_output_chars = 20000
-"#;
+        [debug]
+        persist_engine_event_logs = false
+        max_action_output_chars = 20000
+        "#;
 
         let config = toml::from_str::<AppConfig>(raw).expect("config should deserialize");
 
@@ -367,8 +367,8 @@ max_action_output_chars = 20000
         let raw = r#"
 [general]
 theme = "dark"
-default_engine = "codex"
-default_model = "gpt-5.4"
+default_engine = "mistral"
+default_model = "mistral-large"
 native_window_decorations = false
 
 [ui]
@@ -428,8 +428,8 @@ max_action_output_chars = 20000
         let raw = r#"
 [general]
 theme = "dark"
-default_engine = "codex"
-default_model = "gpt-5.4"
+default_engine = "mistral"
+default_model = "mistral-large"
 
 [ui]
 sidebar_width = 260

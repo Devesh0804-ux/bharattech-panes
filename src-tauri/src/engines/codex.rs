@@ -750,7 +750,7 @@ impl Engine for CodexEngine {
                             reason.as_deref(),
                         );
                         log::warn!(
-                            "codex requested external ChatGPT token refresh, but Panes does not manage chatgptAuthTokens mode"
+                            "codex requested external ChatGPT token refresh, but BharatTech does not manage chatgptAuthTokens mode"
                         );
                         self
                             .publish_external_auth_tokens_warning(
@@ -769,7 +769,7 @@ impl Engine for CodexEngine {
                         .respond_error(
                           &raw_id,
                           -32601,
-                          "`account/chatgptAuthTokens/refresh` is not supported by Panes",
+                          "`account/chatgptAuthTokens/refresh` is not supported by BharatTech",
                           Some(serde_json::json!({
                             "method": method,
                             "normalizedMethod": normalized_method,
@@ -1470,7 +1470,7 @@ impl CodexEngine {
                             reason.as_deref(),
                         );
                         log::warn!(
-                            "codex requested external ChatGPT token refresh during review, but Panes does not manage chatgptAuthTokens mode"
+                            "codex requested external ChatGPT token refresh during review, but BharatTech does not manage chatgptAuthTokens mode"
                         );
                         self
                             .publish_external_auth_tokens_warning(
@@ -1489,7 +1489,7 @@ impl CodexEngine {
                         .respond_error(
                           &raw_id,
                           -32601,
-                          "`account/chatgptAuthTokens/refresh` is not supported by Panes",
+                          "`account/chatgptAuthTokens/refresh` is not supported by BharatTech",
                           Some(serde_json::json!({
                             "method": method,
                             "normalizedMethod": normalized_method,
@@ -1727,12 +1727,12 @@ impl CodexEngine {
 
         if prefer_external_sandbox_by_default() {
             Some(
-                "Panes is forcing Codex external sandbox mode on macOS to avoid opaque tool-call failures in local workspace-write mode. Set `PANES_CODEX_PREFER_WORKSPACE_WRITE=1` only for diagnostics."
+                "BharatTech is forcing Codex external sandbox mode on macOS to avoid opaque tool-call failures in local workspace-write mode. Set `PANES_CODEX_PREFER_WORKSPACE_WRITE=1` only for diagnostics."
                     .to_string(),
             )
         } else {
             Some(
-                "macOS denied Codex local sandbox (`sandbox-exec`). Commands may fail unless Panes uses external sandbox mode. This is an OS/policy restriction, not a promptable permission.".to_string(),
+                "macOS denied Codex local sandbox (`sandbox-exec`). Commands may fail unless BharatTech uses external sandbox mode. This is an OS/policy restriction, not a promptable permission.".to_string(),
             )
         }
     }
@@ -2145,8 +2145,8 @@ impl CodexEngine {
 
         let initialize_params = serde_json::json!({
           "clientInfo": {
-            "name": "panes",
-            "title": "Panes",
+            "name": "bharattech",
+            "title": "BharatTech",
             "version": env!("CARGO_PKG_VERSION"),
           },
           "capabilities": {
@@ -2990,7 +2990,7 @@ fn codex_unavailable_details_for_platform(
 
     match (platform, resolution.login_shell_executable.as_ref()) {
         ("macos", Some(shell_path)) => Some(format!(
-            "Codex was found in your login shell at `{}`, but Panes does not see this in its app PATH. This is common when launching from Finder on macOS. App PATH: `{}`",
+            "Codex was found in your login shell at `{}`, but BharatTech does not see this in its app PATH. This is common when launching from Finder on macOS. App PATH: `{}`",
             shell_path.display(),
             path_preview
         )),
@@ -2999,7 +2999,7 @@ fn codex_unavailable_details_for_platform(
             CODEX_MISSING_DEFAULT_DETAILS, path_preview
         )),
         (_, Some(shell_path)) => Some(format!(
-            "Codex was found in your login shell at `{}`, but Panes does not see this in its app PATH. App PATH: `{}`",
+            "Codex was found in your login shell at `{}`, but BharatTech does not see this in its app PATH. App PATH: `{}`",
             shell_path.display(),
             path_preview
         )),
@@ -3032,23 +3032,23 @@ fn codex_execution_failure_details_for_platform(
     {
         if platform == "windows" {
             return format!(
-                "Codex executable was found at `{executable}`, but Panes could not find `node` when launching it. This usually means Node.js is not installed or its install directory is missing from PATH on Windows. App PATH: `{path_preview}`. Error: {error}"
+                "Codex executable was found at `{executable}`, but BharatTech could not find `node` when launching it. This usually means Node.js is not installed or its install directory is missing from PATH on Windows. App PATH: `{path_preview}`. Error: {error}"
             );
         }
 
         if platform != "macos" {
             return format!(
-                "Codex executable was found at `{executable}`, but Panes could not find `node` when launching it. App PATH: `{path_preview}`. Error: {error}"
+                "Codex executable was found at `{executable}`, but BharatTech could not find `node` when launching it. App PATH: `{path_preview}`. Error: {error}"
             );
         }
 
         return format!(
-            "Codex executable was found at `{executable}`, but Panes could not find `node` when launching it (Finder-launched apps often have a limited PATH). App PATH: `{path_preview}`. Error: {error}"
+            "Codex executable was found at `{executable}`, but BharatTech could not find `node` when launching it (Finder-launched apps often have a limited PATH). App PATH: `{path_preview}`. Error: {error}"
         );
     }
 
     format!(
-        "Codex executable was found at `{executable}`, but Panes could not run it. App PATH: `{path_preview}`. Error: {error}"
+        "Codex executable was found at `{executable}`, but BharatTech could not run it. App PATH: `{path_preview}`. Error: {error}"
     )
 }
 
@@ -3119,11 +3119,11 @@ fn codex_fix_commands_for_platform(
                         "launchctl setenv PATH \"{}:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin\"",
                         bin_dir.display()
                     ));
-                    fixes.push("open -a Panes".to_string());
+                    fixes.push("open -a BharatTech".to_string());
                 }
             } else {
                 fixes.push("/bin/zsh -lic 'command -v codex && codex --version'".to_string());
-                fixes.push("open -a Panes".to_string());
+                fixes.push("open -a BharatTech".to_string());
             }
         } else if execution_error.is_some() {
             if let Some(executable) = resolution.executable.as_ref() {
@@ -3138,7 +3138,7 @@ fn codex_fix_commands_for_platform(
                 "/bin/zsh -lic 'command -v node && command -v codex && codex --version'"
                     .to_string(),
             );
-            fixes.push("open -a Panes".to_string());
+            fixes.push("open -a BharatTech".to_string());
         }
 
         return fixes;
@@ -3151,7 +3151,7 @@ fn codex_fix_commands_for_platform(
             fixes.push("where codex".to_string());
             fixes.push("echo %APPDATA%".to_string());
             fixes.push(
-                "Ensure `%APPDATA%\\npm` is present in PATH, then restart Panes.".to_string(),
+                "Ensure `%APPDATA%\\npm` is present in PATH, then restart BharatTech.".to_string(),
             );
             return fixes;
         }
@@ -3161,7 +3161,7 @@ fn codex_fix_commands_for_platform(
             fixes.push("where codex".to_string());
             fixes.push("echo %PATH%".to_string());
             fixes.push(
-                "Ensure Node.js 20+ is installed and visible to Panes, then restart the app."
+                "Ensure Node.js 20+ is installed and visible to BharatTech, then restart the app."
                     .to_string(),
             );
         }
@@ -4184,7 +4184,7 @@ fn build_reconciled_turn_completion_events(
     {
         events.push(EngineEvent::Error {
             message:
-                "Codex finished after Panes lost the live event stream, so the transcript may be incomplete."
+                "Codex finished after BharatTech lost the live event stream, so the transcript may be incomplete."
                     .to_string(),
             recoverable: true,
         });
@@ -4491,15 +4491,15 @@ fn unsupported_external_auth_tokens_message(
 ) -> String {
     match (previous_account_id, reason) {
         (Some(previous_account_id), Some(reason)) => format!(
-            "Codex is using external ChatGPT auth tokens for account `{previous_account_id}` after `{reason}`, but Panes cannot refresh those tokens. Re-authenticate outside Panes or switch Codex to a managed auth mode."
+            "Codex is using external ChatGPT auth tokens for account `{previous_account_id}` after `{reason}`, but BharatTech cannot refresh those tokens. Re-authenticate outside BharatTech or switch Codex to a managed auth mode."
         ),
         (Some(previous_account_id), None) => format!(
-            "Codex is using external ChatGPT auth tokens for account `{previous_account_id}`, but Panes cannot refresh those tokens. Re-authenticate outside Panes or switch Codex to a managed auth mode."
+            "Codex is using external ChatGPT auth tokens for account `{previous_account_id}`, but BharatTech cannot refresh those tokens. Re-authenticate outside BharatTech or switch Codex to a managed auth mode."
         ),
         (None, Some(reason)) => format!(
-            "Codex is using external ChatGPT auth tokens after `{reason}`, but Panes cannot refresh those tokens. Re-authenticate outside Panes or switch Codex to a managed auth mode."
+            "Codex is using external ChatGPT auth tokens after `{reason}`, but BharatTech cannot refresh those tokens. Re-authenticate outside BharatTech or switch Codex to a managed auth mode."
         ),
-        (None, None) => "Codex is using external ChatGPT auth tokens, but Panes cannot refresh those tokens. Re-authenticate outside Panes or switch Codex to a managed auth mode.".to_string(),
+        (None, None) => "Codex is using external ChatGPT auth tokens, but BharatTech cannot refresh those tokens. Re-authenticate outside BharatTech or switch Codex to a managed auth mode.".to_string(),
     }
 }
 
@@ -7224,7 +7224,7 @@ mod tests {
             "windows",
             &CodexExecutableResolution {
                 executable: Some(std::path::PathBuf::from(
-                    r"C:\Users\panes\AppData\Roaming\npm\codex.cmd",
+                    r"C:\Users\bharattech\AppData\Roaming\npm\codex.cmd",
                 )),
                 source: "app-path",
                 app_path: Some(r"C:\Windows\System32".to_string()),
@@ -7335,7 +7335,7 @@ mod tests {
                     },
                     {
                         "name": "user-skill",
-                        "path": "/Users/panes/.codex/user-skill",
+                        "path": "/Users/bharattech/.codex/user-skill",
                         "description": "User skill",
                         "enabled": true,
                         "scope": "user"
@@ -7426,7 +7426,7 @@ mod tests {
                 {
                     "name": {
                         "type": "user",
-                        "file": "/Users/panes/.codex/config.toml"
+                        "file": "/Users/bharattech/.codex/config.toml"
                     },
                     "version": "v2",
                     "config": {}
@@ -7444,7 +7444,7 @@ mod tests {
         assert_eq!(mapped.layers.len(), 1);
         assert_eq!(
             mapped.layers[0].source,
-            "user:/Users/panes/.codex/config.toml"
+            "user:/Users/bharattech/.codex/config.toml"
         );
         assert_eq!(mapped.layers[0].version, "v2");
         assert!(mapped.approval_policy.is_some());

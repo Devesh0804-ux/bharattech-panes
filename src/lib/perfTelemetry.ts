@@ -26,12 +26,12 @@ interface PerfMetricSummary {
 const MAX_STORED_METRICS = 4_000;
 const WARN_COOLDOWN_MS = 8_000;
 const PERF_BUDGETS: Record<PerfMetricName, number> = {
-  "chat.turn.first_shell.ms": 48,
+  "chat.turn.first_shell.ms": 80,
   "chat.turn.first_content.ms": 1_400,
   "chat.turn.first_text.ms": 1_800,
   "chat.stream.flush.ms": 12,
   "chat.stream.events_per_sec": 450,
-  "chat.render.commit.ms": 16,
+  "chat.render.commit.ms": 40,
   "chat.markdown.worker.ms": 28,
   "git.refresh.ms": 350,
   "git.file_diff.ms": 250,

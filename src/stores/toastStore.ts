@@ -26,22 +26,26 @@ const DEFAULT_DURATIONS: Record<Toast["variant"], number> = {
   error: 8000,
 };
 
-let nextId = 0;
-
-export const useToastStore = create<ToastState>((set) => ({
+export const useToastStore = create<ToastState>((set, get) => ({
   toasts: [],
 
   addToast: ({ variant, message, duration }) => {
-    const id = String(++nextId);
+    const id = crypto.randomUUID(); // ✅ better than increment id
     const ms = duration ?? DEFAULT_DURATIONS[variant];
 
     set((state) => {
-      let toasts = [...state.toasts, { id, variant, message, duration: ms }];
-      if (toasts.length > MAX_TOASTS) {
-        toasts = toasts.slice(1);
-      }
-      return { toasts };
+      const next = [
+        ...state.toasts,
+        { id, variant, message, duration: ms },
+      ].slice(-MAX_TOASTS); // ✅ cleaner limit
+
+      return { toasts: next };
     });
+
+    // ✅ AUTO DISMISS (IMPORTANT)
+    setTimeout(() => {
+      get().dismissToast(id);
+    }, ms);
 
     return id;
   },
@@ -53,13 +57,17 @@ export const useToastStore = create<ToastState>((set) => ({
   },
 }));
 
+// ✅ CLEAN API
 export const toast = {
   success: (message: string, duration?: number) =>
     useToastStore.getState().addToast({ variant: "success", message, duration }),
+
   error: (message: string, duration?: number) =>
     useToastStore.getState().addToast({ variant: "error", message, duration }),
+
   warning: (message: string, duration?: number) =>
     useToastStore.getState().addToast({ variant: "warning", message, duration }),
+
   info: (message: string, duration?: number) =>
     useToastStore.getState().addToast({ variant: "info", message, duration }),
 };

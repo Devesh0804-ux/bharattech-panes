@@ -1,5 +1,5 @@
 /* ──────────────────────────────────────────────────
-   Panes Landing Page — style.css
+   BharatTech Landing Page — style.css
    ────────────────────────────────────────────────── */
 
 /* ── Design Tokens ── */
@@ -2140,7 +2140,7 @@ button:focus-visible {
   font-weight: 600;
 }
 
-/* ── Manifesto Visual: Three Panes ── */
+/* ── Manifesto Visual: Three BharatTech ── */
 .manifesto-visual {
   width: 100%;
   max-width: 900px;

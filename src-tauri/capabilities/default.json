@@ -16,7 +16,6 @@
     "dialog:allow-open",
     "fs:allow-read-text-file",
     "notification:default",
-    "updater:default",
     "process:allow-restart"
   ]
 }

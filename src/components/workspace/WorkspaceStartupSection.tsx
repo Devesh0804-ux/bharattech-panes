@@ -295,7 +295,7 @@ export function WorkspaceStartupSection({ workspace }: WorkspaceStartupSectionPr
   const [pendingApplyPreset, setPendingApplyPreset] = useState<WorkspaceStartupPreset | null>(null);
   const [liveSessionCount, setLiveSessionCount] = useState(0);
   const [expandedTabs, setExpandedTabs] = useState<Record<string, boolean>>({});
-  const [expandedPanes, setExpandedPanes] = useState<Record<string, boolean>>({});
+  const [expandedPaneRows, setExpandedPaneRows] = useState<Record<string, boolean>>({});
   const loadRequestIdRef = useRef(0);
   const applyInFlightRef = useRef(false);
   const mountedRef = useRef(true);
@@ -1080,10 +1080,10 @@ export function WorkspaceStartupSection({ workspace }: WorkspaceStartupSectionPr
                     </div>
                   )}
 
-                  {/* Panes */}
+                  {/* Session panes */}
                   <div className="wss-panes">
                     {group.sessions.map((session, si) => {
-                      const paneExpanded = expandedPanes[session.id] ?? false;
+                      const paneExpanded = expandedPaneRows[session.id] ?? false;
 
                       return (
                         <div key={session.id} className="wss-pane">
@@ -1124,7 +1124,7 @@ export function WorkspaceStartupSection({ workspace }: WorkspaceStartupSectionPr
                               type="button"
                               className={`wss-icon-btn ${paneExpanded ? "wss-icon-btn-active" : ""}`}
                               onClick={() =>
-                                setExpandedPanes((p) => ({ ...p, [session.id]: !p[session.id] }))
+                                setExpandedPaneRows((p) => ({ ...p, [session.id]: !p[session.id] }))
                               }
                               title={t("startup.moreOptions")}
                             >

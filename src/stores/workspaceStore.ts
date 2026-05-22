@@ -1,8 +1,11 @@
 import { create } from "zustand";
 import type { Repo, TrustLevel, Workspace } from "../types";
 import { ipc } from "../lib/ipc";
+import { isTauriRuntime } from "../lib/runtime";
 import { useGitStore } from "./gitStore";
 import { useTerminalStore } from "./terminalStore";
+
+
 
 interface SetActiveRepoOptions {
   remember?: boolean;
@@ -17,6 +20,7 @@ interface WorkspaceState {
   reposLoading: boolean;
   loading: boolean;
   error?: string;
+  addWorkspace: (ws: Workspace) => void;
   loadWorkspaces: () => Promise<void>;
   refreshArchivedWorkspaces: () => Promise<void>;
   openWorkspace: (path: string, scanDepth?: number) => Promise<Workspace | null>;
@@ -37,6 +41,7 @@ const LAST_WORKSPACE_KEY = "panes:lastActiveWorkspaceId";
 const LAST_REPO_BY_WORKSPACE_KEY = "panes:lastActiveRepoByWorkspace";
 let reposLoadSeq = 0;
 
+
 type LastRepoByWorkspace = Record<string, string>;
 
 function isTransientLinuxAppImageRoot(rootPath: string): boolean {
@@ -47,22 +52,25 @@ function resolveStartupWorkspaceId(
   workspaces: Workspace[],
   savedId: string | null,
 ): string | null {
+  const safeWorkspaces = Array.isArray(workspaces) ? workspaces : [];
+
   const savedWorkspace = savedId
-    ? workspaces.find((workspace) => workspace.id === savedId) ?? null
+    ? safeWorkspaces.find((workspace) => workspace.id === savedId) ?? null
     : null;
 
   if (savedWorkspace && !isTransientLinuxAppImageRoot(savedWorkspace.rootPath)) {
     return savedWorkspace.id;
   }
 
-  if (!savedId) {
-    return null;
-  }
+  if (!savedId) return null;
 
   return (
-    workspaces.find((workspace) => !isTransientLinuxAppImageRoot(workspace.rootPath))?.id ?? null
+    safeWorkspaces.find(
+      (workspace) => !isTransientLinuxAppImageRoot(workspace.rootPath)
+    )?.id ?? null
   );
 }
+
 
 function readLastRepoByWorkspace(): LastRepoByWorkspace {
   try {
@@ -139,18 +147,52 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   activeRepoId: null,
   reposLoading: false,
   loading: false,
+
+  addWorkspace: (ws) =>
+    set((state) => ({
+      workspaces: [...state.workspaces, ws],
+    })),
+
   loadWorkspaces: async () => {
     set({ loading: true, error: undefined });
+
+    // ✅ WEB MODE FIX
+    if (!isTauriRuntime()) {
+      const fakeWorkspace: Workspace = {
+        id: "web-1",
+        name: "My Project",
+        rootPath: "web",
+        scanDepth: 1,
+        createdAt: new Date().toISOString(),
+        lastOpenedAt: new Date().toISOString(),
+      };
+
+      set({
+        workspaces: [fakeWorkspace],
+        activeWorkspaceId: fakeWorkspace.id,
+        repos: [],
+        loading: false,
+      });
+
+      return;
+    }
+
     try {
       const workspaces = await ipc.listWorkspaces();
-      const savedId = localStorage.getItem(LAST_WORKSPACE_KEY);
-      const activeWorkspaceId = resolveStartupWorkspaceId(workspaces, savedId);
-      set({ workspaces, activeWorkspaceId, loading: false });
+
+      const safeWorkspaces = Array.isArray(workspaces) ? workspaces : [];
+
+      const savedId = localStorage.getItem("panes:lastActiveWorkspaceId");
+      const activeWorkspaceId = resolveStartupWorkspaceId(safeWorkspaces, savedId);
+
+      set({ workspaces: safeWorkspaces, activeWorkspaceId, loading: false });
+
       if (activeWorkspaceId) {
         await useTerminalStore.getState().prepareWorkspaceActivation(activeWorkspaceId);
         useGitStore.getState().loadDraftsForWorkspace(activeWorkspaceId);
         await get().loadRepos(activeWorkspaceId);
       }
+
       await get().refreshArchivedWorkspaces();
     } catch (error) {
       set({ loading: false, error: String(error) });
@@ -166,6 +208,27 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   },
   openWorkspace: async (path, scanDepth) => {
     set({ loading: true, error: undefined });
+
+    if (!isTauriRuntime()) {
+      const fakeWorkspace: Workspace = {
+        id: `web:${path}`,
+        name: path.split(/[\\/]/).filter(Boolean).pop() ?? path,
+        rootPath: path,
+        scanDepth: scanDepth ?? 1,
+        createdAt: new Date().toISOString(),
+        lastOpenedAt: new Date().toISOString(),
+      };
+
+      set({
+        workspaces: [fakeWorkspace],
+        activeWorkspaceId: fakeWorkspace.id,
+        repos: [],
+        loading: false,
+      });
+
+      return fakeWorkspace;
+    }
+
     try {
       const workspace = await ipc.openWorkspace(path, scanDepth);
       const current = get().workspaces.filter((item) => item.id !== workspace.id);
@@ -189,7 +252,10 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     try {
       await ipc.archiveWorkspace(workspaceId);
       const wasActiveWorkspace = get().activeWorkspaceId === workspaceId;
-      const removed = get().workspaces.find((workspace) => workspace.id === workspaceId) ?? null;
+      const ws = get().workspaces;
+const safeWorkspaces = Array.isArray(ws) ? ws : [];
+
+const removed = safeWorkspaces.find((workspace) => workspace.id === workspaceId) ?? null;
       const remaining = get().workspaces.filter((workspace) => workspace.id !== workspaceId);
       const nextActive =
         wasActiveWorkspace
@@ -376,8 +442,14 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       set({ error: String(error) });
     }
   },
+
   rescanWorkspace: async (workspaceId, scanDepth) => {
-    const workspace = get().workspaces.find((w) => w.id === workspaceId);
+    const ws = get().workspaces;
+    const safeWorkspaces = Array.isArray(ws) ? ws : [];
+
+    const workspace =
+      safeWorkspaces.find((w) => w.id === workspaceId) ?? null;
+
     if (!workspace) return null;
 
     try {
@@ -385,6 +457,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
         workspace.rootPath,
         scanDepth ?? workspace.scanDepth,
       );
+
       set((state) => ({
         workspaces: [
           updatedWorkspace,
@@ -405,6 +478,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       throw error;
     }
   },
+
   setAllReposTrustLevel: async (trustLevel) => {
     const repos = get().repos;
     if (!repos.length) {

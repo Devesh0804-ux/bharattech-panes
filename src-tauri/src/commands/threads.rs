@@ -1027,7 +1027,7 @@ async fn set_thread_execution_policy_inner(
         )
     {
         return Err(
-            "Codex read-only and workspace-write sandbox overrides are unavailable while Panes is using external sandbox mode."
+            "Codex read-only and workspace-write sandbox overrides are unavailable while BharatTech is using external sandbox mode."
                 .to_string(),
         );
     }
@@ -1369,7 +1369,7 @@ async fn build_codex_branch_context(
         codex_external_sandbox_active,
     ) {
         return Err(
-            "Codex read-only and workspace-write sandbox overrides are unavailable while Panes is using external sandbox mode. Clear the override or restore local Codex sandboxing first.".to_string(),
+            "Codex read-only and workspace-write sandbox overrides are unavailable while BharatTech is using external sandbox mode. Clear the override or restore local Codex sandboxing first.".to_string(),
         );
     }
 

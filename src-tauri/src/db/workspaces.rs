@@ -459,7 +459,7 @@ mod tests {
         let home = std::env::temp_dir().join(format!("panes-home-{}", Uuid::new_v4()));
         fs::create_dir_all(&home).expect("failed to create temp home");
 
-        let cwd = std::path::Path::new("/tmp/.mount_PanesTest/usr");
+        let cwd = std::path::Path::new("/tmp/.mount_BharatTechTest/usr");
         let selected =
             preferred_default_workspace_root_for(Some(cwd), Some(&home), None, false, None, None);
 
@@ -504,7 +504,7 @@ mod tests {
             .join(format!("panes-home-{}", Uuid::new_v4()))
             .join("Users")
             .join("panes");
-        let install_dir = home.join("AppData").join("Local").join("Panes");
+        let install_dir = home.join("AppData").join("Local").join("BharatTech");
         fs::create_dir_all(&install_dir).expect("failed to create fake install dir");
         fs::create_dir_all(&home).expect("failed to create temp home");
 

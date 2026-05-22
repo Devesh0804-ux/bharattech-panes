@@ -1,6 +1,6 @@
 use std::{collections::VecDeque, fs, path::PathBuf};
 
-use git2::{Reference, Repository};
+use git2::{ErrorCode, Reference, Repository};
 
 #[derive(Debug, Clone)]
 pub struct DetectedRepo {
@@ -66,6 +66,39 @@ pub fn scan_git_repositories(
     }
 
     Ok(repos)
+}
+
+pub fn discover_containing_git_repository(
+    root_path: &str,
+) -> anyhow::Result<Option<DetectedRepo>> {
+    let root = PathBuf::from(root_path);
+    if !root.exists() {
+        return Ok(None);
+    }
+
+    let repository = match Repository::discover(&root) {
+        Ok(repository) => repository,
+        Err(error) if matches!(error.code(), ErrorCode::NotFound | ErrorCode::Owner) => {
+            return Ok(None);
+        }
+        Err(error) => return Err(error.into()),
+    };
+
+    let Some(workdir) = repository.workdir() else {
+        return Ok(None);
+    };
+
+    let path = fs::canonicalize(workdir).unwrap_or_else(|_| workdir.to_path_buf());
+    let name = path
+        .file_name()
+        .map(|name| name.to_string_lossy().to_string())
+        .unwrap_or_else(|| "repo".to_string());
+
+    Ok(Some(DetectedRepo {
+        name,
+        path: path.to_string_lossy().to_string(),
+        default_branch: detect_default_branch(&repository),
+    }))
 }
 
 fn detect_default_branch(repository: &Repository) -> String {
@@ -199,7 +232,7 @@ mod tests {
         let tree_id = index.write_tree().expect("write tree");
         let tree = repo.find_tree(tree_id).expect("find tree");
         let signature =
-            Signature::now("Panes Test", "panes-test@example.com").expect("build signature");
+            Signature::now("BharatTech Test", "panes-test@example.com").expect("build signature");
 
         repo.commit(
             Some("HEAD"),

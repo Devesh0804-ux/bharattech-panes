@@ -3976,8 +3976,8 @@ export function TerminalPanel({ workspaceId }: TerminalPanelProps) {
               </button>
               {(() => {
                 const activeGroup = groups.find((g) => g.id === activeGroupId);
-                const hasManyPanes = activeGroup && collectSessionIds(activeGroup.root).length > 1;
-                if (!hasManyPanes) return null;
+                const hasMultipleSplits = activeGroup && collectSessionIds(activeGroup.root).length > 1;
+                if (!hasMultipleSplits) return null;
                 const isBroadcasting = workspaceState?.broadcastGroupId === activeGroupId;
                 return (
                   <button

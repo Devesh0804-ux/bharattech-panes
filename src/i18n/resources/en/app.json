@@ -1,5 +1,5 @@
 {
-  "title": "Panes",
+  "title": "BharatTech",
   "updates": {
     "checkingTitle": "Checking for updates",
     "checkingMessage": "This should only take a moment.",
@@ -12,8 +12,8 @@
     "restartingTitle": "Restarting...",
     "failedTitle": "Update failed",
     "failedMessage": "An unexpected error occurred.",
-    "idleTitle": "Panes",
-    "idleTitleWithVersion": "Panes v{{version}}",
+    "idleTitle": "BharatTech",
+    "idleTitleWithVersion": "BharatTech v{{version}}",
     "idleMessage": "You're on the latest version.",
     "checkAgain": "Check again"
   },
@@ -50,13 +50,13 @@
     "checkUpdates": "Check for updates",
     "preferences": "Preferences",
     "keepAwake": "Keep Awake",
-    "keepAwakeDescription": "Help keep the computer awake while Panes is open",
+    "keepAwakeDescription": "Help keep the computer awake while BharatTech is open",
     "keepAwakeUnsupported": "Not supported on this device",
     "keepAwakeInactive": "Enabled, but not currently active",
     "keepAwakeLimited": "Enabled, but lid-close protection is not active",
     "keepAwakePowerSettings": "Power Settings",
     "terminalNotifications": "Agent notifications",
-    "terminalNotificationsDescription": "Desktop alerts for chat replies and Panes terminal activity",
+    "terminalNotificationsDescription": "Desktop alerts for chat replies and BharatTech terminal activity",
     "terminalNotificationsReady": "Chat can be enabled now. Install terminal hooks when you want CLI alerts too",
     "terminalNotificationsEnabledChat": "Chat reply alerts are on",
     "terminalNotificationsEnabledTerminal": "Terminal agent alerts are on",
@@ -350,8 +350,8 @@
     "loading": "Detecting installed harnesses...",
     "footerHint": "Installed harnesses appear as quick-launch options in your terminal + button",
     "descriptions": {
-      "codex": "OpenAI's coding agent CLI, integrated natively with Panes chat and terminal workflows",
-      "claude-code": "Anthropic's coding CLI, integrated natively with Panes for repo-aware and terminal-driven workflows",
+      "codex": "OpenAI's coding agent CLI, integrated natively with BharatTech chat and terminal workflows",
+      "claude-code": "Anthropic's coding CLI, integrated natively with BharatTech for repo-aware and terminal-driven workflows",
       "gemini-cli": "Google's coding agent CLI for code generation, repo tasks, and terminal workflows",
       "kiro": "AWS's coding CLI focused on structured, agent-style development workflows",
       "opencode": "Open-source coding assistant for chat, edits, and terminal workflows",
@@ -472,26 +472,26 @@
   },
   "notificationSettings": {
     "title": "Agent notifications",
-    "description": "Control chat reply alerts and terminal agent alerts separately. Terminal tools need one-time setup before Panes can surface their notifications.",
+    "description": "Control chat reply alerts and terminal agent alerts separately. Terminal tools need one-time setup before BharatTech can surface their notifications.",
     "descriptionShort": "Desktop alerts for chat replies and terminal agents.",
     "chatSectionTitle": "Chat",
     "terminalSectionTitle": "Terminal",
     "chatCard": {
       "title": "Chat reply notifications",
-      "description": "Show a desktop notification when a Panes chat thread finishes in the background.",
+      "description": "Show a desktop notification when a BharatTech chat thread finishes in the background.",
       "descriptionShort": "Notify when a chat thread finishes in the background.",
-      "detail": "No extra setup required. Panes can notify for chat replies immediately."
+      "detail": "No extra setup required. BharatTech can notify for chat replies immediately."
     },
     "terminalCard": {
       "title": "Terminal agent notifications",
-      "description": "Show desktop notifications for Panes terminal activity, including OSC alerts and optional Claude Code or Codex integrations.",
+      "description": "Show desktop notifications for BharatTech terminal activity, including OSC alerts and optional Claude Code or Codex integrations.",
       "descriptionShort": "Notify for terminal activity. OSC works immediately; Claude and Codex need one-time setup.",
       "ready": "Terminal integrations are installed. You can turn terminal alerts on whenever you want.",
       "setupRequired": "Install at least one terminal integration below before enabling terminal alerts."
     },
     "workflowTitle": "How this works",
-    "workflowDescription": "OSC notifications work immediately in Panes terminals. Claude Code and Codex need a one-time config install, and those commands only deliver alerts from terminals launched by Panes.",
-    "workflowShort": "OSC works immediately. Claude and Codex hooks are written to your config and only fire from terminals launched by Panes.",
+    "workflowDescription": "OSC notifications work immediately in BharatTech terminals. Claude Code and Codex need a one-time config install, and those commands only deliver alerts from terminals launched by BharatTech.",
+    "workflowShort": "OSC works immediately. Claude and Codex hooks are written to your config and only fire from terminals launched by BharatTech.",
     "setupRequired": "Install at least one terminal integration before turning terminal alerts on.",
     "integrationsLabel": "Integrations",
     "sound": {
@@ -509,7 +509,7 @@
     "installing": "Installing...",
     "statusReady": "Notifications are active",
     "statusOff": "All notifications are off",
-    "footerNote": "Chat notifications are controlled entirely in Panes. Terminal integrations stay installed until you replace them in Claude or Codex config.",
+    "footerNote": "Chat notifications are controlled entirely in BharatTech. Terminal integrations stay installed until you replace them in Claude or Codex config.",
     "status": {
       "installed": "Installed",
       "notInstalled": "Not installed",
@@ -518,13 +518,13 @@
     "integrations": {
       "claude": {
         "title": "Claude Code",
-        "description": "Merge Panes hook commands into your Claude user settings",
-        "detail": "Adds Panes lifecycle hooks without removing your existing Claude hooks."
+        "description": "Merge BharatTech hook commands into your Claude user settings",
+        "detail": "Adds BharatTech lifecycle hooks without removing your existing Claude hooks."
       },
       "codex": {
         "title": "Codex CLI",
-        "description": "Write Panes notify config into your Codex user config",
-        "detail": "Sets Codex's notify command so completed turns can reach Panes."
+        "description": "Write BharatTech notify config into your Codex user config",
+        "detail": "Sets Codex's notify command so completed turns can reach BharatTech."
       }
     },
     "toasts": {
@@ -547,7 +547,7 @@
   "powerModal": {
     "title": "Power Management",
     "keepAwake": "Keep Awake",
-    "keepAwakeDescription": "Prevent idle system sleep while Panes is open",
+    "keepAwakeDescription": "Prevent idle system sleep while BharatTech is open",
     "displaySection": "Display",
     "preventDisplaySleep": "Prevent display sleep",
     "preventDisplaySleepDescription": "Keep the screen on",

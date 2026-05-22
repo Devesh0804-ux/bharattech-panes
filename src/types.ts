@@ -35,6 +35,32 @@ export interface PowerSettings {
   preventClosedDisplaySleep: boolean;
 }
 
+export interface Thread {
+  id: string;
+  title: string;
+  workspaceId?: string;
+  repoId?: string | null;
+
+  engineId?: string;
+  modelId?: string;
+  engineThreadId?: string | null;
+
+  // 🔥 REQUIRED FIXES
+  status?: ThreadStatus;
+  lastActivityAt?: string;
+  messageCount?: number;
+  totalTokens?: number;
+
+  engineMetadata?: {
+    reasoningEffort?: string;
+    lastModelId?: string;
+    [key: string]: any;
+  };
+
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface PowerSettingsInput {
   keepAwakeEnabled: boolean;
   preventDisplaySleep: boolean;
@@ -149,22 +175,6 @@ export type ThreadStatus =
   | "awaiting_approval"
   | "error"
   | "completed";
-
-export interface Thread {
-  id: string;
-  workspaceId: string;
-  repoId: string | null;
-  engineId: "codex" | "claude";
-  modelId: string;
-  engineThreadId: string | null;
-  engineMetadata?: Record<string, unknown>;
-  title: string;
-  status: ThreadStatus;
-  messageCount: number;
-  totalTokens: number;
-  createdAt: string;
-  lastActivityAt: string;
-}
 
 export interface CodexRemoteThread {
   engineThreadId: string;

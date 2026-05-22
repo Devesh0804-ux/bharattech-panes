@@ -43,8 +43,10 @@ export function WorkspaceSettingsModal({
   const storeSetAllTrust = useWorkspaceStore((s) => s.setAllReposTrustLevel);
   const storeRescan = useWorkspaceStore((s) => s.rescanWorkspace);
 
+  const safeWorkspaces = Array.isArray(workspaces) ? workspaces : [];
+
   const currentWorkspace =
-    workspaces.find((candidate) => candidate.id === workspace.id) ?? workspace;
+    safeWorkspaces.find((candidate) => candidate.id === workspace.id) ?? workspace;
 
   const isActive = currentWorkspace.id === activeWorkspaceId;
 

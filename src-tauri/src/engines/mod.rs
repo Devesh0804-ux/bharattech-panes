@@ -5,8 +5,8 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tokio::sync::{broadcast, mpsc, oneshot};
-use tokio::time::{timeout, Duration};
 use tokio_util::sync::CancellationToken;
+use crate::engines::mistral::MistralEngine;
 
 use crate::{
     engines::{
@@ -27,6 +27,7 @@ pub mod codex_event_mapper;
 pub mod codex_protocol;
 pub mod codex_transport;
 pub mod events;
+pub mod mistral;
 
 pub use codex::CodexRuntimeEvent;
 pub use events::*;
@@ -117,6 +118,7 @@ const CLAUDE_CAPABILITIES: EngineCapabilities = EngineCapabilities {
 pub fn capabilities_for_engine(engine_id: &str) -> EngineCapabilities {
     match engine_id {
         "claude" => CLAUDE_CAPABILITIES,
+        "mistral" => CLAUDE_CAPABILITIES,
         _ => CODEX_CAPABILITIES,
     }
 }
@@ -208,6 +210,7 @@ pub fn approval_response_route_for_engine(
 ) -> Option<ApprovalRequestRoute> {
     match engine_id {
         "codex" => codex_event_mapper::extract_persisted_approval_route(details),
+        "mistral" => None,
         _ => None,
     }
 }
@@ -347,6 +350,7 @@ pub trait Engine: Send + Sync {
 pub struct EngineManager {
     codex: Arc<CodexEngine>,
     claude: Arc<ClaudeSidecarEngine>,
+    mistral: Arc<MistralEngine>,
 }
 
 impl EngineManager {
@@ -354,6 +358,7 @@ impl EngineManager {
         Self {
             codex: Arc::new(CodexEngine::default()),
             claude: Arc::new(ClaudeSidecarEngine::default()),
+            mistral: Arc::new(MistralEngine::default()),
         }
     }
 
@@ -362,72 +367,38 @@ impl EngineManager {
     }
 
     pub async fn list_engines(&self) -> anyhow::Result<Vec<EngineInfoDto>> {
-        let codex_models = match timeout(Duration::from_secs(4), self.codex.list_models_runtime())
-            .await
-        {
-            Ok(models) => models,
-            Err(_) => {
-                log::warn!(
-                        "timed out loading codex runtime models; falling back to cached or static model catalog"
-                    );
-                self.codex.runtime_model_fallback().await
-            }
-        };
-        let claude_models = self.claude.models();
-
         Ok(vec![
             EngineInfoDto {
-                id: self.codex.id().to_string(),
-                name: self.codex.name().to_string(),
-                models: codex_models.into_iter().map(map_model_info).collect(),
-                capabilities: map_engine_capabilities(capabilities_for_engine(self.codex.id())),
-            },
-            EngineInfoDto {
-                id: self.claude.id().to_string(),
-                name: self.claude.name().to_string(),
-                models: claude_models.into_iter().map(map_model_info).collect(),
-                capabilities: map_engine_capabilities(capabilities_for_engine(self.claude.id())),
+                id: self.mistral.id().to_string(),
+                name: self.mistral.name().to_string(),
+                models: self.mistral.models().into_iter().map(map_model_info).collect(),
+                capabilities: map_engine_capabilities(capabilities_for_engine(self.mistral.id())),
             },
         ])
     }
 
     pub async fn health(&self, engine_id: &str) -> anyhow::Result<EngineHealthDto> {
         match engine_id {
-            "codex" => {
-                let report = self.codex.health_report().await;
+            "mistral" => {
                 Ok(EngineHealthDto {
-                    id: "codex".to_string(),
-                    available: report.available,
-                    version: report.version,
-                    details: report.details,
-                    warnings: report.warnings,
-                    checks: report.checks,
-                    fixes: report.fixes,
-                    protocol_diagnostics: report.protocol_diagnostics,
-                })
-            }
-            "claude" => {
-                let report = self.claude.health_report().await;
-                Ok(EngineHealthDto {
-                    id: "claude".to_string(),
-                    available: report.available,
-                    version: report.version,
-                    details: Some(report.details),
-                    warnings: report.warnings,
-                    checks: report.checks,
-                    fixes: report.fixes,
+                    id: "mistral".to_string(),
+                    available: true,
+                    version: None,
+                    details: Some("Mistral API".to_string()),
+                    warnings: vec![],
+                    checks: vec![],
+                    fixes: vec![],
                     protocol_diagnostics: None,
                 })
             }
-            _ => anyhow::bail!("unknown engine: {engine_id}"),
+            _ => anyhow::bail!("only the Mistral engine is enabled"),
         }
     }
 
     pub async fn prewarm(&self, engine_id: &str) -> anyhow::Result<()> {
         match engine_id {
-            "codex" => self.codex.prewarm().await,
-            "claude" => self.claude.prewarm().await,
-            _ => anyhow::bail!("unknown engine: {engine_id}"),
+            "mistral" => self.mistral.prewarm().await,
+            _ => anyhow::bail!("only the Mistral engine is enabled"),
         }
     }
 
@@ -522,19 +493,15 @@ impl EngineManager {
         let resume_id = thread.engine_thread_id.as_deref();
         let effective_model_id = model_id.unwrap_or(thread.model_id.as_str());
 
-        let result = match thread.engine_id.as_str() {
-            "codex" => self
-                .codex
-                .start_thread(scope, resume_id, effective_model_id, sandbox)
-                .await
-                .context("failed to start codex thread")?,
-            "claude" => self
-                .claude
-                .start_thread(scope, resume_id, effective_model_id, sandbox)
-                .await
-                .context("failed to start claude thread")?,
-            _ => anyhow::bail!("unsupported engine_id {}", thread.engine_id),
-        };
+        if thread.engine_id != "mistral" {
+            anyhow::bail!("only the Mistral engine is enabled");
+        }
+
+        let result = self
+            .mistral
+            .start_thread(scope, resume_id, effective_model_id, sandbox)
+            .await
+            .context("failed to start mistral thread")?;
 
         Ok(result.engine_thread_id)
     }
@@ -547,19 +514,19 @@ impl EngineManager {
         event_tx: mpsc::Sender<EngineEvent>,
         cancellation: CancellationToken,
     ) -> anyhow::Result<()> {
-        match thread.engine_id.as_str() {
-            "codex" => self
-                .codex
-                .send_message(engine_thread_id, input, event_tx, cancellation)
-                .await
-                .context("codex send_message failed"),
-            "claude" => self
-                .claude
-                .send_message(engine_thread_id, input, event_tx, cancellation)
-                .await
-                .context("claude send_message failed"),
-            _ => anyhow::bail!("unsupported engine_id {}", thread.engine_id),
+
+        if thread.engine_id != "mistral" {
+            anyhow::bail!("only the Mistral engine is enabled");
         }
+
+        self.mistral
+            .send_message(engine_thread_id, input, event_tx, cancellation)
+            .await
+            .context("mistral send_message failed")?;
+
+        println!("ENGINE USED: {}", thread.engine_id);
+
+        Ok(())
     }
 
     pub async fn steer_message(
@@ -568,19 +535,14 @@ impl EngineManager {
         engine_thread_id: &str,
         input: TurnInput,
     ) -> anyhow::Result<()> {
-        match thread.engine_id.as_str() {
-            "codex" => self
-                .codex
-                .steer_message(engine_thread_id, input)
-                .await
-                .context("codex steer_message failed"),
-            "claude" => self
-                .claude
-                .steer_message(engine_thread_id, input)
-                .await
-                .context("claude steer_message failed"),
-            _ => anyhow::bail!("unsupported engine_id {}", thread.engine_id),
+        if thread.engine_id != "mistral" {
+            anyhow::bail!("only the Mistral engine is enabled");
         }
+
+        self.mistral
+            .steer_message(engine_thread_id, input)
+            .await
+            .context("mistral steer_message failed")
     }
 
     pub async fn respond_to_approval(
@@ -590,28 +552,22 @@ impl EngineManager {
         response: serde_json::Value,
         route: Option<ApprovalRequestRoute>,
     ) -> anyhow::Result<()> {
-        match thread.engine_id.as_str() {
-            "codex" => {
-                self.codex
-                    .respond_to_approval(approval_id, response, route)
-                    .await
-            }
-            "claude" => {
-                self.claude
-                    .respond_to_approval(approval_id, response, route)
-                    .await
-            }
-            _ => anyhow::bail!("unsupported engine_id {}", thread.engine_id),
+        if thread.engine_id != "mistral" {
+            anyhow::bail!("only the Mistral engine is enabled");
         }
+
+        self.mistral
+            .respond_to_approval(approval_id, response, route)
+            .await
     }
 
     pub async fn interrupt(&self, thread: &ThreadDto) -> anyhow::Result<()> {
         let engine_thread_id = thread.engine_thread_id.as_deref().unwrap_or("default");
-        match thread.engine_id.as_str() {
-            "codex" => self.codex.interrupt(engine_thread_id).await,
-            "claude" => self.claude.interrupt(engine_thread_id).await,
-            _ => anyhow::bail!("unsupported engine_id {}", thread.engine_id),
+        if thread.engine_id != "mistral" {
+            anyhow::bail!("only the Mistral engine is enabled");
         }
+
+        self.mistral.interrupt(engine_thread_id).await
     }
 
     pub async fn archive_thread(&self, thread: &ThreadDto) -> anyhow::Result<()> {
@@ -619,11 +575,11 @@ impl EngineManager {
             return Ok(());
         };
 
-        match thread.engine_id.as_str() {
-            "codex" => self.codex.archive_thread(engine_thread_id).await,
-            "claude" => self.claude.archive_thread(engine_thread_id).await,
-            _ => anyhow::bail!("unsupported engine_id {}", thread.engine_id),
+        if thread.engine_id != "mistral" {
+            anyhow::bail!("only the Mistral engine is enabled");
         }
+
+        self.mistral.archive_thread(engine_thread_id).await
     }
 
     pub async fn unarchive_thread(&self, thread: &ThreadDto) -> anyhow::Result<()> {
@@ -631,11 +587,11 @@ impl EngineManager {
             return Ok(());
         };
 
-        match thread.engine_id.as_str() {
-            "codex" => self.codex.unarchive_thread(engine_thread_id).await,
-            "claude" => self.claude.unarchive_thread(engine_thread_id).await,
-            _ => anyhow::bail!("unsupported engine_id {}", thread.engine_id),
+        if thread.engine_id != "mistral" {
+            anyhow::bail!("only the Mistral engine is enabled");
         }
+
+        self.mistral.unarchive_thread(engine_thread_id).await
     }
 
     pub async fn codex_uses_external_sandbox(&self) -> bool {
@@ -648,7 +604,7 @@ impl EngineManager {
         engine_thread_id: &str,
     ) -> Option<String> {
         match thread.engine_id.as_str() {
-            "codex" => self.codex.read_thread_preview(engine_thread_id).await,
+            "mistral" => self.mistral.read_thread_preview(engine_thread_id).await,
             _ => None,
         }
     }
@@ -659,11 +615,11 @@ impl EngineManager {
         engine_thread_id: &str,
         name: &str,
     ) -> anyhow::Result<()> {
-        match thread.engine_id.as_str() {
-            "codex" => self.codex.set_thread_name(engine_thread_id, name).await,
-            "claude" => Ok(()),
-            _ => anyhow::bail!("unsupported engine_id {}", thread.engine_id),
+        if thread.engine_id != "mistral" {
+            anyhow::bail!("only the Mistral engine is enabled");
         }
+
+        self.mistral.set_thread_name(engine_thread_id, name).await
     }
 
     pub fn subscribe_codex_runtime_events(&self) -> broadcast::Receiver<CodexRuntimeEvent> {
@@ -678,15 +634,14 @@ impl EngineManager {
             return Ok(None);
         };
 
-        match thread.engine_id.as_str() {
-            "codex" => self
-                .codex
-                .read_thread_sync_snapshot(engine_thread_id)
-                .await
-                .map(Some),
-            "claude" => Ok(None),
-            _ => anyhow::bail!("unsupported engine_id {}", thread.engine_id),
+        if thread.engine_id != "mistral" {
+            return Ok(None);
         }
+
+        self.mistral
+            .read_thread_sync_snapshot(engine_thread_id)
+            .await
+            .map(Some)
     }
 }
 

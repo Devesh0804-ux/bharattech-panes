@@ -87,15 +87,19 @@ export function resolvePreferredOnboardingChatSelection(
   }
 
   const [engineId] = selectedEngines;
-  const engine = engines.find((candidate) => candidate.id === engineId);
+  const safeEngines = Array.isArray(engines) ? engines : [];
+
+  const engine = safeEngines.find((candidate) => candidate.id === engineId);
   if (!engine) {
     return null;
   }
 
+  const safeModels = Array.isArray(engine?.models) ? engine.models : [];
+
   const model =
-    engine.models.find((candidate) => candidate.isDefault) ??
-    engine.models.find((candidate) => !candidate.hidden) ??
-    engine.models[0];
+    safeModels.find((candidate) => candidate.isDefault) ??
+    safeModels.find((candidate) => !candidate.hidden) ??
+    safeModels[0];
   if (!model) {
     return null;
   }
@@ -162,11 +166,7 @@ export function isChatEngineReady(
   engineHealth: Partial<Record<OnboardingChatEngineId, EngineHealth>>,
 ): boolean {
   if (engineId === "codex") {
-    return Boolean(
-      dependencyReport?.node.found &&
-        dependencyReport.codex.found &&
-        (engineHealth.codex?.available || isCodexAuthDeferred(engineHealth.codex)),
-    );
+    return engineHealth.codex?.available ?? true;
   }
 
   return engineHealth.claude?.available ?? false;

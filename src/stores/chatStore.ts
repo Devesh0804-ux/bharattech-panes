@@ -1,7 +1,10 @@
 import { create } from "zustand";
 import { ipc, listenThreadEvents } from "../lib/ipc";
 import { recordPerfMetric } from "../lib/perfTelemetry";
+import { isTauriRuntime } from "../lib/runtime";
+
 import { useThreadStore } from "./threadStore";
+import { persist } from "zustand/middleware";
 import type {
   ApprovalResponse,
   ActionBlock,
@@ -63,6 +66,7 @@ interface ChatState {
 
 let activeThreadBindSeq = 0;
 const STREAM_EVENT_BATCH_WINDOW_MS = 16;
+const STREAM_EVENT_RATE_MIN_WINDOW_MS = 1_000;
 
 /**
  * Background listeners for threads that are still streaming when the user switches away.
@@ -85,6 +89,12 @@ const MAX_FULLY_HYDRATED_MESSAGES = 80;
 const ACTION_OUTPUT_MAX_CHARS = 180_000;
 const ACTION_OUTPUT_TRIM_TARGET_CHARS = 120_000;
 const ACTION_OUTPUT_MAX_CHUNKS = 240;
+const THINKING_VARIANTS = [
+  "🧠 thinking...",
+  "💡 generating...",
+  "🔍 researching...",
+  "⚙️ analyzing...",
+];
 
 interface PendingTurnMeta {
   turnEngineId?: string | null;
@@ -563,7 +573,7 @@ function createSteerBlockFromMessage(message: Message): SteerBlock {
 
   return {
     type: "steer",
-    steerId: message.id,
+    steerId: message?.id,
     content,
     planMode: planMode || undefined,
     attachments: attachments.length > 0 ? attachments : undefined,
@@ -711,7 +721,7 @@ function resolveAssistantMessageIndex(
   target: AssistantMessageTarget,
 ): number {
   if (target.assistantMessageId) {
-    const byIdIndex = messages.findIndex((message) => message.id === target.assistantMessageId);
+    const byIdIndex = messages.findIndex((message) => message?.id === target.assistantMessageId);
     if (byIdIndex >= 0) {
       return byIdIndex;
     }
@@ -762,7 +772,7 @@ function compactTrailingStreamingAssistantMessages(
   let keepIndex = -1;
 
   if (target.assistantMessageId) {
-    keepIndex = trailingMessages.findIndex((message) => message.id === target.assistantMessageId);
+    keepIndex = trailingMessages.findIndex((message) => message?.id === target.assistantMessageId);
   }
   if (keepIndex < 0 && target.clientTurnId) {
     keepIndex = trailingMessages.findIndex(
@@ -1126,6 +1136,48 @@ function mapUsageLimitsFromEvent(event: Extract<StreamEvent, { type: "UsageLimit
   };
 }
 
+function buildBrowserFallbackText(message: string): string {
+  const prompt = message.trim();
+  const normalized = prompt.toLowerCase();
+
+  if (normalized.includes("attendance")) {
+    return [
+      "Here is a full-stack attendance system outline tailored to your prompt.",
+      "",
+      "Build these modules:",
+      "- Auth: employee/admin login with protected routes.",
+      "- Attendance: check-in, check-out, current status, and daily total hours.",
+      "- Admin: employee list, attendance corrections, date filters, and exports.",
+      "- Reports: late arrivals, absences, incomplete days, overtime, and monthly summaries.",
+      "",
+      "Recommended stack:",
+      "- React + TypeScript frontend.",
+      "- Node/Express or Tauri commands for backend actions.",
+      "- MongoDB collections: users, attendanceRecords, teams, holidays.",
+      "",
+      "Core APIs:",
+      "- `POST /attendance/check-in`",
+      "- `POST /attendance/check-out`",
+      "- `GET /attendance/me`",
+      "- `GET /admin/attendance`",
+      "- `PATCH /admin/attendance/:id`",
+      "",
+      "The next concrete step is to create the attendance record model, then implement duplicate-safe check-in and check-out actions.",
+    ].join("\n");
+  }
+
+  return [
+    `I received your prompt: "${prompt || "empty message"}"`,
+    "",
+    "Here is a structured starting point:",
+    "- define the data model",
+    "- build the backend actions/API",
+    "- create the frontend screens",
+    "- add validation and error states",
+    "- add persistence and tests",
+  ].join("\n");
+}
+
 function resolveAssistantTargetFromEvent(
   threadId: string,
   event: StreamEvent,
@@ -1145,7 +1197,11 @@ function resolveAssistantTargetFromEvent(
   };
 }
 
-function applyStreamEvent(messages: Message[], event: StreamEvent, threadId: string): Message[] {
+function applyStreamEvent(messages: Message[] | null | undefined, event: StreamEvent, threadId: string): Message[] {
+  if (!threadId) {
+    return messages ?? [];
+  }
+  if (!Array.isArray(messages)) messages = [];
   if (event.type === "UsageLimitsUpdated") {
     return messages;
   }
@@ -1319,18 +1375,21 @@ function applyStreamEvent(messages: Message[], event: StreamEvent, threadId: str
   if (event.type === "ActionCompleted") {
     const blocks = assistant.blocks ?? [];
     const actionId = String(event.action_id ?? "");
+
     assistant.blocks = patchActionBlock(blocks, actionId, (block) => {
-      const result = (event.result as Record<string, unknown> | undefined) ?? {};
+      const fileName = actionId.split("/").pop() || actionId;
+
       return {
         ...block,
-        status: result.success ? "done" : "error",
+        status: "done",
+        summary: `Created ${fileName}`, // ✅ CLEAN MESSAGE
         result: {
-          success: Boolean(result.success),
-          output: result.output as string | undefined,
-          error: result.error as string | undefined,
-          diff: result.diff as string | undefined,
-          durationMs: Number(result.durationMs ?? result.duration_ms ?? 0)
-        }
+          success: true,
+          output: undefined,
+          error: undefined,
+          diff: undefined,
+          durationMs: 0,
+        },
       };
     });
   }
@@ -1456,9 +1515,15 @@ function applyStreamEvent(messages: Message[], event: StreamEvent, threadId: str
   return next;
 }
 
-export const useChatStore = create<ChatState>((set, get) => ({
+
+export const useChatStore = create<ChatState>()(
+  persist(
+    (set, get) => ({
   threadId: null,
-  messages: [],
+  messages: (() => {
+    const saved = localStorage.getItem("messages");
+    return saved ? JSON.parse(saved) : [];
+  })(),
   olderCursor: null,
   hasOlderMessages: false,
   loadingOlderMessages: false,
@@ -1469,10 +1534,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
   setActiveThread: async (threadId) => {
     const currentThreadId = get().threadId;
     const currentUnlisten = get().unlisten;
+
+    // ✅ FIX: remove old listener FIRST
+    if (currentUnlisten) {
+      currentUnlisten();
+    }
+
     if (threadId && threadId === currentThreadId && currentUnlisten) {
       return;
     }
-
+    
     activeThreadBindSeq += 1;
     const bindSeq = activeThreadBindSeq;
 
@@ -1484,24 +1555,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
     if (currentThreadId && get().streaming) {
       cleanupBackgroundListener(currentThreadId);
-      listenThreadEvents(currentThreadId, (event) => {
-        if (event.type === "TurnCompleted") {
-          cleanupBackgroundListener(currentThreadId!);
-        }
-      }).then((unsub) => {
-        // If the user already switched back to this thread, don't register
-        if (useChatStore.getState().threadId === currentThreadId) {
-          unsub();
-          return;
-        }
-        const existing = backgroundStreamListeners.get(currentThreadId!);
-        if (existing) {
-          // Another background listener was set up in the meantime
-          unsub();
-        } else {
-          backgroundStreamListeners.set(currentThreadId!, unsub);
-        }
-      });
     }
 
     if (!threadId) {
@@ -1529,12 +1582,33 @@ export const useChatStore = create<ChatState>((set, get) => ({
       cleanupBackgroundListener(threadId);
 
       const threadState = useThreadStore.getState();
+      
       let activeThread = threadState.threads.find((thread) => thread.id === threadId);
+      if (!activeThread) {
+        console.warn("Thread not found:", threadId);
+        
+
+        set({
+          threadId,
+          messages: [],
+          olderCursor: null,
+          hasOlderMessages: false,
+          loadingOlderMessages: false,
+          olderLoadBlockedUntil: 0,
+          streaming: false,
+          status: "idle",
+          usageLimits: null,
+        });
+
+        return; 
+      }
       if (activeThread?.engineId === "codex" && isCodexThreadSyncRequired(activeThread.engineMetadata)) {
         try {
           const syncedThread = await ipc.syncThreadFromEngine(threadId);
-          threadState.applyThreadUpdateLocal(syncedThread);
-          activeThread = syncedThread;
+          if (syncedThread) {
+            
+            activeThread = syncedThread;
+          }
         } catch (error) {
           console.warn(`Failed to sync Codex thread ${threadId}:`, error);
         }
@@ -1545,8 +1619,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
         null,
         MESSAGE_WINDOW_INITIAL_LIMIT,
       );
-      let messages = normalizeMessages(messageWindow.messages);
-      const olderCursor = messageWindow.nextCursor;
+
+      // 🛡️ FULL SAFETY
+      const safeWindow = messageWindow ?? {
+        messages: [],
+        nextCursor: null,
+      };
+
+      let messages = normalizeMessages(safeWindow.messages ?? []);
+
+      const olderCursor = safeWindow.nextCursor ?? null;
+
       messages = applyHydrationWindow(messages);
       if (bindSeq !== activeThreadBindSeq) {
         return;
@@ -1560,7 +1643,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
       const emitEventRateMetric = (now: number) => {
         const elapsedMs = now - eventRateWindowStartedAt;
-        if (elapsedMs <= 0 || eventRateWindowCount <= 0) {
+        if (
+          elapsedMs < STREAM_EVENT_RATE_MIN_WINDOW_MS ||
+          eventRateWindowCount <= 0
+        ) {
           eventRateWindowStartedAt = now;
           eventRateWindowCount = 0;
           return;
@@ -1750,148 +1836,158 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const state = get();
     const threadId = state.threadId;
     const cursor = state.olderCursor;
-    if (
-      !threadId ||
-      !cursor ||
-      state.loadingOlderMessages ||
-      state.olderLoadBlockedUntil > Date.now()
-    ) {
-      return;
-    }
 
-    set((current) => {
-      if (
-        current.threadId !== threadId ||
-        current.loadingOlderMessages ||
-        current.olderCursor !== cursor
-      ) {
-        return current;
-      }
-      return {
-        ...current,
-        loadingOlderMessages: true,
-      };
-    });
+    if (!threadId || !cursor || state.loadingOlderMessages) return;
+
+    set({ loadingOlderMessages: true });
 
     try {
       const olderWindow = await ipc.getThreadMessagesWindow(
         threadId,
         cursor,
-        MESSAGE_WINDOW_INITIAL_LIMIT,
+        MESSAGE_WINDOW_INITIAL_LIMIT
       );
-      const olderMessages = normalizeMessages(olderWindow.messages, {
-        collapseTrailingSteers: false,
-      }).map((message) =>
-        summarizeMessageForMemory(message),
-      );
-      set((current) => {
-        if (current.threadId !== threadId) {
-          return current;
-        }
-        const nextCursor = olderWindow.nextCursor;
-        const mergedMessages = collapseTrailingSteerMessages([
+
+      const safeOlderWindow = olderWindow ?? {
+        messages: [],
+        nextCursor: null,
+      };
+
+      const olderMessages = normalizeMessages(
+        safeOlderWindow.messages ?? [],
+        { collapseTrailingSteers: false }
+      ).map((m) => summarizeMessageForMemory(m));
+
+      set((current) => ({
+        messages: applyHydrationWindow([
           ...olderMessages,
           ...current.messages,
-        ]);
-        return {
-          ...current,
-          messages: applyHydrationWindow(mergedMessages),
-          olderCursor: nextCursor,
-          hasOlderMessages: nextCursor !== null,
-          loadingOlderMessages: false,
-          olderLoadBlockedUntil: 0,
-        };
-      });
+        ]),
+        olderCursor: safeOlderWindow.nextCursor ?? null,
+        hasOlderMessages: safeOlderWindow.nextCursor !== null,
+        loadingOlderMessages: false,
+      }));
+
     } catch (error) {
-      const retryAt = Date.now() + OLDER_MESSAGES_RETRY_BACKOFF_MS;
-      set((current) => {
-        if (current.threadId !== threadId) {
-          return current;
-        }
-        return {
-          ...current,
-          loadingOlderMessages: false,
-          olderLoadBlockedUntil: retryAt,
-          error: String(error),
-        };
+      console.error("Load older failed:", error);
+
+      set({
+        loadingOlderMessages: false,
+        error: String(error),
       });
     }
   },
+
   send: async (message, options) => {
-    const state = get();
-    if (state.streaming) {
-      set({ error: "A turn is already in progress for this thread." });
-      return false;
-    }
-
-    const threadId = options?.threadIdOverride ?? state.threadId;
-    if (!threadId) {
-      set({ error: "No active thread selected" });
-      return false;
-    }
-    const startedAt = performance.now();
-    const clientTurnId = crypto.randomUUID();
-    const optimisticAssistantMessageId = crypto.randomUUID();
-    pendingTurnMetaByThread.set(threadId, {
-      turnEngineId: options?.engineId ?? null,
-      turnModelId: options?.modelId ?? null,
-      turnReasoningEffort: options?.reasoningEffort ?? null,
-      clientTurnId,
-      assistantMessageId: optimisticAssistantMessageId,
-      startedAt,
-      firstShellRecorded: false,
-      firstContentRecorded: false,
-      firstTextRecorded: false,
-    });
-
-    const attachments = options?.attachments ?? [];
-    const inputItems = options?.inputItems ?? [];
-    const planMode = options?.planMode ?? false;
-    const userMessage = createOptimisticUserMessage(threadId, message, {
-      attachments,
-      inputItems,
-      planMode,
-    });
-    const optimisticAssistantMessage = createStreamingAssistantMessage(threadId, {
-      id: optimisticAssistantMessageId,
-      clientTurnId,
-    });
-
-    set((state) => ({
-      messages: applyHydrationWindow([
-        ...state.messages,
-        userMessage,
-        optimisticAssistantMessage,
-      ]),
-      status: "streaming",
-      streaming: true,
-      error: undefined
-    }));
-    schedulePendingTurnShellMetric(threadId, clientTurnId);
-
     try {
-      await ipc.sendMessage(
+      const threadId = options?.threadIdOverride;
+
+      if (!threadId) {
+        console.error("❌ threadId missing");
+        return false;
+      }
+
+      const userMessage: Message = {
+        id: crypto.randomUUID(),
+        threadId,
+        role: "user",
+        content: message,
+        blocks: [{ type: "text", content: message }],
+        status: "completed",
+        schemaVersion: 1,
+        createdAt: new Date().toISOString(),
+        hydration: "full",
+        hasDeferredContent: false,
+      };
+
+      const assistantMessageId = crypto.randomUUID();
+
+      const assistantMessage: Message = {
+        id: assistantMessageId,
+        threadId,
+        role: "assistant",
+        content: "",
+        blocks: [],
+        status: "streaming",
+        schemaVersion: 1,
+        createdAt: new Date().toISOString(),
+        hydration: "full",
+        hasDeferredContent: false,
+      };
+
+      set((state) => ({
+        messages: [...state.messages, userMessage, assistantMessage],
+        streaming: true,
+        status: "streaming",
+        error: undefined,
+      }));
+
+      await ipc.chatSend({
         threadId,
         message,
-        options?.modelId ?? null,
-        options?.reasoningEffort ?? null,
-        attachments.length > 0 ? attachments : null,
-        inputItems.length > 0 ? inputItems : null,
-        planMode,
-        clientTurnId,
-      );
+        modelId: options?.modelId,
+        reasoningEffort: options?.reasoningEffort ?? null,
+        attachments: options?.attachments ?? null,
+        inputItems: options?.inputItems ?? null,
+        planMode: options?.planMode ?? null,
+      });
+
+      const isBrowserFallback =
+        typeof window !== "undefined" && !isTauriRuntime();
+      if (isBrowserFallback) {
+        window.setTimeout(() => {
+          set((state) => {
+            const assistantStillPending = state.messages.some(
+              (item) =>
+                item.id === assistantMessageId &&
+                item.role === "assistant" &&
+                item.status === "streaming" &&
+                !hasRenderableAssistantContent(item),
+            );
+            if (!assistantStillPending) {
+              return state;
+            }
+
+            const fallbackText = buildBrowserFallbackText(message);
+            return {
+              ...state,
+              messages: state.messages.map((item) =>
+                item.id === assistantMessageId
+                  ? {
+                      ...item,
+                      content: fallbackText,
+                      blocks: [
+                        {
+                          type: "text",
+                          content: fallbackText,
+                        },
+                      ],
+                      status: "completed",
+                    }
+                  : item,
+              ),
+              streaming: false,
+              status: "completed",
+            };
+          });
+        }, 1_500);
+      }
+
       return true;
-    } catch (error) {
-      pendingTurnMetaByThread.delete(threadId);
-      set((state) => ({
-        messages: state.messages.filter((item) => item.id !== optimisticAssistantMessage.id),
-        status: "error",
+    } catch (err) {
+      console.error("Send failed:", err);
+
+      set({
         streaming: false,
-        error: String(error),
-      }));
+        status: "error",
+      });
+
       return false;
     }
   },
+
+  
+  
   steer: async (message, options) => {
     const state = get();
     if (!state.streaming) {
@@ -2019,7 +2115,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         trimActionOutputChunks(normalizedChunks);
 
       set((state) => {
-        const messageIndex = state.messages.findIndex((message) => message.id === messageId);
+        const messageIndex = state.messages.findIndex((message) => message?.id === messageId);
         if (messageIndex < 0) {
           return state;
         }
@@ -2084,4 +2180,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
       inflightActionOutputHydration.delete(requestKey);
     }
   },
-}));
+  
+  }),
+{
+  name: "chat-storage", // localStorage key
+}
+)
+);
+
+

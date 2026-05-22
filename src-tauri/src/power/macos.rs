@@ -26,8 +26,8 @@ use super::{
     SpawnedKeepAwakeChild, SupportStatus,
 };
 
-const ASSERTION_NAME: &str = "Panes Keep Awake";
-const DISPLAY_ASSERTION_NAME: &str = "Panes Keep Display Awake";
+const ASSERTION_NAME: &str = "BharatTech Keep Awake";
+const DISPLAY_ASSERTION_NAME: &str = "BharatTech Keep Display Awake";
 const K_IOPM_ASSERTION_LEVEL_ON: u32 = 255;
 const K_IO_MESSAGE_CAN_SYSTEM_SLEEP: u32 = 0xE000_0270;
 const K_IO_MESSAGE_SYSTEM_WILL_SLEEP: u32 = 0xE000_0280;

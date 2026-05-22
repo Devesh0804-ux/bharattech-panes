@@ -110,7 +110,11 @@ function ensureMarkdownWorker(): Worker | null {
       if (payload.ok) {
         callback.resolve(payload.html);
       } else {
-        callback.reject(new Error(payload.error));
+        if ("error" in payload) {
+          callback.reject(new Error(payload.error));
+        } else {
+          callback.reject(new Error("Unknown markdown parse error"));
+        }
       }
     };
     markdownWorkerInstance.onerror = (error) => {

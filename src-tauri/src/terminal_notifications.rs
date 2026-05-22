@@ -47,7 +47,7 @@ const CLAUDE_NOTIFICATION_HOOK_EVENT: &str = "Notification";
 const CLAUDE_SESSION_END_HOOK_EVENT: &str = "SessionEnd";
 const CLAUDE_SESSION_START_HOOK_EVENT: &str = "SessionStart";
 const CLAUDE_HOOK_COMMAND: &str = "panes claude-hook";
-const NOTIFICATION_DEFAULT_TITLE: &str = "Panes";
+const NOTIFICATION_DEFAULT_TITLE: &str = "BharatTech";
 const NOTIFICATION_DEFAULT_BODY: &str = "Notification";
 const NOTIFICATION_EVENT_PREFIX: &str = "terminal-notification-";
 const NOTIFICATION_CLEARED_EVENT_PREFIX: &str = "terminal-notification-cleared-";
@@ -566,7 +566,7 @@ pub fn parse_terminal_notification_integration_kind(
 
 pub fn agent_notification_settings_status() -> anyhow::Result<AgentNotificationSettingsStatusDto> {
     let config = crate::config::app_config::AppConfig::load_or_create()
-        .context("failed to load Panes config")?;
+        .context("failed to load BharatTech config")?;
     let claude = inspect_claude_notification_integration();
     let codex = inspect_codex_notification_integration();
     Ok(AgentNotificationSettingsStatusDto {
@@ -1511,7 +1511,7 @@ fn send_notify_request(
     request: &NotificationIngressRequest,
 ) -> anyhow::Result<()> {
     let mut stream = TcpStream::connect_timeout(addr, Duration::from_secs(2))
-        .with_context(|| format!("failed to connect to Panes notification ingress at {addr}"))?;
+        .with_context(|| format!("failed to connect to BharatTech notification ingress at {addr}"))?;
     let _ = stream.set_read_timeout(Some(Duration::from_secs(2)));
     let _ = stream.set_write_timeout(Some(Duration::from_secs(2)));
 
@@ -1543,7 +1543,7 @@ fn send_notify_request(
         "{}",
         response
             .error
-            .unwrap_or_else(|| "Panes notification ingress rejected the request".to_string())
+            .unwrap_or_else(|| "BharatTech notification ingress rejected the request".to_string())
     );
 }
 
@@ -1557,7 +1557,7 @@ fn install_cli_shims() -> anyhow::Result<PathBuf> {
     })?;
 
     let current_exe =
-        std::env::current_exe().context("failed to resolve current Panes executable")?;
+        std::env::current_exe().context("failed to resolve current BharatTech executable")?;
     write_cli_shim(
         &bin_dir.join(panes_cli_shim_name()),
         &panes_cli_shim_contents(&current_exe),
@@ -1792,7 +1792,7 @@ fn resolve_wrapped_binary(binary: &str, shim_dir: &Path) -> anyhow::Result<PathB
     let filtered = std::env::join_paths(entries).context("failed to rebuild PATH without shims")?;
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     which::which_in(binary, Some(filtered), cwd)
-        .with_context(|| format!("failed to find the real {binary} binary outside Panes shims"))
+        .with_context(|| format!("failed to find the real {binary} binary outside BharatTech shims"))
 }
 
 fn paths_match(left: &Path, right: &Path) -> bool {
@@ -2290,14 +2290,14 @@ mod tests {
     #[test]
     #[cfg(not(windows))]
     fn unix_cli_shim_escapes_single_quotes() {
-        let contents = panes_cli_shim_contents(Path::new("/tmp/Panes' Dev"));
-        assert!(contents.contains("'/tmp/Panes'\\'' Dev'"));
+        let contents = panes_cli_shim_contents(Path::new("/tmp/BharatTech' Dev"));
+        assert!(contents.contains("'/tmp/BharatTech'\\'' Dev'"));
     }
 
     #[test]
     #[cfg(not(windows))]
     fn unix_claude_cli_shim_invokes_wrapper_subcommand() {
-        let contents = claude_cli_shim_contents(Path::new("/tmp/Panes' Dev"));
+        let contents = claude_cli_shim_contents(Path::new("/tmp/BharatTech' Dev"));
         assert!(contents.contains(CLAUDE_WRAPPER_SUBCOMMAND));
     }
 

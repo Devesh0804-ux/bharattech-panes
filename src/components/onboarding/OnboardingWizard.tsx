@@ -1,6 +1,6 @@
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
-import { open as openDirectoryDialog } from "@tauri-apps/plugin-dialog";
 import { open as openExternal } from "@tauri-apps/plugin-shell";
+import { open as openDirectoryDialog } from "@tauri-apps/plugin-dialog";
 import { useTranslation } from "react-i18next";
 import {
   AlertTriangle,
@@ -61,6 +61,7 @@ const EMPTY_READINESS_STATE: ReadinessState = {
   engineHealth: {},
   error: null,
 };
+
 
 /* ─── Constants ─── */
 
@@ -700,11 +701,12 @@ export function OnboardingWizard() {
   const open = useOnboardingStore((s) => s.open);
   const completed = useOnboardingStore((s) => s.completed);
   const legacyCompleted = useOnboardingStore((s) => s.legacyCompleted);
-  const step = useOnboardingStore((s) => s.step);
+  const step = useOnboardingStore((s) => s.step) ?? "greeting";
   const preferredWorkflow = useOnboardingStore((s) => s.preferredWorkflow);
-  const selectedChatEngines = useOnboardingStore((s) => s.selectedChatEngines);
+  const selectedChatEngines =
+    useOnboardingStore((s) => s.selectedChatEngines) ?? [];
   const selectedWorkspaceId = useOnboardingStore((s) => s.selectedWorkspaceId);
-  const installLog = useOnboardingStore((s) => s.installLog);
+  const installLog = useOnboardingStore((s) => s.installLog) ?? [];
   const installing = useOnboardingStore((s) => s.installing);
   const installError = useOnboardingStore((s) => s.error);
   const openOnboarding = useOnboardingStore((s) => s.openOnboarding);
@@ -720,10 +722,10 @@ export function OnboardingWizard() {
 
   const harnessPhase = useHarnessStore((s) => s.phase);
   const harnessError = useHarnessStore((s) => s.error);
-  const harnesses = useHarnessStore((s) => s.harnesses);
+  const harnesses = useHarnessStore((s) => s.harnesses) ?? [];
   const scanHarnesses = useHarnessStore((s) => s.scan);
-
   const workspaces = useWorkspaceStore((s) => s.workspaces);
+  const safeWorkspaces = Array.isArray(workspaces) ? workspaces : [];
   const activeWorkspaceId = useWorkspaceStore((s) => s.activeWorkspaceId);
   const workspaceLoading = useWorkspaceStore((s) => s.loading);
   const workspaceError = useWorkspaceStore((s) => s.error);
@@ -744,16 +746,16 @@ export function OnboardingWizard() {
   const [stepDirection, setStepDirection] = useState<"forward" | "back">("forward");
   const [stepAnimKey, setStepAnimKey] = useState(0);
 
-  const visibleSteps = getVisibleSteps(preferredWorkflow);
-  const currentStepIndex = visibleSteps.indexOf(step);
-  const stepMetadata = STEP_TITLES[step];
+  const visibleSteps = getVisibleSteps(preferredWorkflow ?? null) ?? ["workflow"];
+  const currentStepIndex = Math.max(0, visibleSteps.indexOf(step));
+  const stepMetadata = STEP_TITLES[step] ?? STEP_TITLES["greeting"];
   const chatWorkflowReady = isChatWorkflowReady(
-    selectedChatEngines,
+    selectedChatEngines ?? [],
     readiness.dependencyReport,
     readiness.engineHealth,
   );
   const chatReady = canContinueChatReadiness(
-    selectedChatEngines,
+    selectedChatEngines ?? [],
     readiness.dependencyReport,
     readiness.engineHealth,
     readiness.loading,
@@ -774,7 +776,7 @@ export function OnboardingWizard() {
       : step === "workflow"
         ? preferredWorkflow !== null
         : step === "chatEngines"
-          ? selectedChatEngines.length > 0
+          ? (selectedChatEngines ?? []).length > 0
           : step === "chatReadiness"
             ? chatReady
             : step === "workspace"
@@ -822,10 +824,24 @@ export function OnboardingWizard() {
       engineResults.forEach((result, i) => {
         const eid = selectedChatEngines[i];
         if (!eid) return;
-        if (result.status === "fulfilled") { nextHealth[eid] = result.value; return; }
+        if (result.status === "fulfilled") {
+          nextHealth[eid] = result.value ?? {
+            id: eid,
+            available: false,
+            details: "Engine health response was null",
+            warnings: [],
+            checks: [],
+            fixes: [],
+          };
+          return;
+        }
         nextHealth[eid] = {
-          id: eid, available: false, details: String(result.reason),
-          warnings: [], checks: [], fixes: [],
+          id: eid,
+          available: false,
+          details: String(result.reason),
+          warnings: [],
+          checks: [],
+          fixes: [],
         };
       });
       if (requestId !== readinessRequestRef.current) return;
@@ -842,7 +858,7 @@ export function OnboardingWizard() {
   }
 
   useEffect(() => {
-    if (!open || step !== "chatReadiness" || selectedChatEngines.length === 0) return;
+    if (!open || step !== "chatReadiness" || (selectedChatEngines ?? []).length === 0) return;
     void refreshReadiness();
   }, [mergeEngineHealth, open, selectedChatEngines, step]);
 
@@ -899,12 +915,49 @@ export function OnboardingWizard() {
   }
 
   async function handleOpenWorkspaceFolder() {
-    const selected = await openDirectoryDialog({ directory: true, multiple: false });
-    if (!selected || Array.isArray(selected)) return;
-    const openedWorkspace = await openWorkspace(selected);
-    if (!openedWorkspace) return;
-    setSelectedWorkspaceId(openedWorkspace.id);
-    setConfirmedWorkspaceId(openedWorkspace.id);
+    try {
+      // 🖥️ TAURI (Desktop)
+      if ((window as any).__TAURI__) {
+        const selected = await openDirectoryDialog({
+          directory: true,
+          multiple: false,
+        });
+
+        if (!selected || Array.isArray(selected)) return;
+
+        const workspace = await openWorkspace(selected);
+        if (!workspace) return;
+
+        setSelectedWorkspaceId(workspace.id);
+        setConfirmedWorkspaceId(workspace.id);
+        return;
+      }
+
+      // 🌐 WEB (Browser)
+      if ("showDirectoryPicker" in window) {
+        const dirHandle = await (window as any).showDirectoryPicker();
+
+        // 👇 simulate workspace object
+        const workspace = {
+          id: dirHandle.name,
+          name: dirHandle.name,
+          rootPath: dirHandle.name, // no real path in browser
+        };
+
+        // 👇 manually update store (IMPORTANT)
+        setSelectedWorkspaceId(workspace.id);
+        setConfirmedWorkspaceId(workspace.id);
+
+        console.log("Selected folder (web):", dirHandle);
+
+        return;
+      }
+
+      alert("Folder selection not supported in this browser");
+
+    } catch (err) {
+      console.error("Folder open failed", err);
+    }
   }
 
   const handleFinish = useCallback(async () => {
@@ -1012,7 +1065,7 @@ export function OnboardingWizard() {
                 maxWidth: 480,
               }}
             >
-              {/* Panes logo */}
+              {/* BharatTech logo */}
               <div
                 style={{
                   marginBottom: 32,
@@ -1213,7 +1266,7 @@ export function OnboardingWizard() {
                     </div>
                   )}
 
-                  {installing?.kind === "harness" || installLog.length > 0 || installError ? (
+                  {installing?.kind === "harness" || (installLog?.length ?? 0) > 0 || installError ? (
                     <div style={{ display: "grid", gap: 6 }}>
                       {installing ? (
                         <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--text-3)" }}>
@@ -1279,7 +1332,7 @@ export function OnboardingWizard() {
                     />
                   ) : null}
 
-                  {selectedChatEngines.includes("codex") &&
+                  {(selectedChatEngines ?? []).includes("codex") &&
                   readiness.dependencyReport &&
                   !readiness.dependencyReport.codex.found ? (
                     <ReadinessDependencyCard
@@ -1300,8 +1353,8 @@ export function OnboardingWizard() {
                     />
                   ) : null}
 
-                  <div style={{ display: "grid", gap: 8, gridTemplateColumns: selectedChatEngines.length > 1 ? "1fr 1fr" : "1fr" }}>
-                    {selectedChatEngines.map((engineId) => (
+                  <div style={{ display: "grid", gap: 8, gridTemplateColumns: (selectedChatEngines ?? []).length > 1 ? "1fr 1fr" : "1fr" }}>
+                    {(selectedChatEngines ?? []).map((engineId) => (
                       <ReadinessEngineRow
                         key={engineId}
                         engineId={engineId}
@@ -1316,7 +1369,7 @@ export function OnboardingWizard() {
                     <StatusMessage tone="info">{t("setup:chatReadiness.readyHint")}</StatusMessage>
                   ) : null}
 
-                  {installing?.kind === "dependency" || installLog.length > 0 || installError ? (
+                  {installing?.kind === "dependency" || (installLog?.length ?? 0) > 0 || installError ? (
                     <div style={{ display: "grid", gap: 6 }}>
                       {installing ? (
                         <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--text-3)" }}>

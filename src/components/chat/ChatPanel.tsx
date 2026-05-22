@@ -73,7 +73,6 @@ import {
   parseToolInputQuestions,
   requiresCustomApprovalPayload,
 } from "./toolInputApproval";
-import { ModelPicker } from "./ModelPicker";
 import {
   type CodexConfigPatch,
   type CodexPersonalityValue,
@@ -114,7 +113,9 @@ const LazyEditorWithExplorer = lazy(() =>
   import("../editor/EditorWithExplorer").then((module) => ({
     default: module.EditorWithExplorer,
   })),
-);
+)
+
+
 
 interface MeasuredMessageRowProps {
   messageId: string;
@@ -388,7 +389,7 @@ function getThreadNetworkPolicyOptions(
   ];
 }
 
-function isCodexExternalSandboxWarning(message?: string): boolean {
+function isCodexExternalSandboxWarning(message: string): boolean {
   if (typeof message !== "string") {
     return false;
   }
@@ -483,7 +484,7 @@ function prewarmEngineTransport(engineId: string): Promise<void> {
     })
     .finally(() => {
       inflightPrewarmByEngine.delete(engineId);
-    });
+    }) as Promise<void>;
   inflightPrewarmByEngine.set(engineId, task);
   return task;
 }
@@ -903,6 +904,7 @@ function parseMessageDate(raw?: string): Date | null {
 
   const sqliteUtcPattern = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/;
   const normalized = sqliteUtcPattern.test(raw) ? `${raw.replace(" ", "T")}Z` : raw;
+  const safeArray = (arr: any) => Array.isArray(arr) ? arr : [];
   const date = new Date(normalized);
   if (Number.isNaN(date.getTime())) {
     return null;
@@ -953,13 +955,14 @@ function formatResetTime(
 }
 
 function estimateMessageOffset(
-  messages: Message[],
+  messages: Message[] = [],
   index: number,
   measuredHeights: Map<string, number>,
 ): number {
   let offset = 0;
   for (let current = 0; current < index; current += 1) {
-    const currentMessageId = messages[current].id;
+    const currentMessageId = messages[current]?.id;
+    if (!currentMessageId) continue;
     const rowHeight =
       measuredHeights.get(currentMessageId) ?? MESSAGE_ESTIMATED_ROW_HEIGHT;
     offset += rowHeight + MESSAGE_ROW_GAP;
@@ -1019,6 +1022,8 @@ function extractMessageCopyText(message: Message): string {
 
 function MessageCopyButton({ message }: { message: Message }) {
   const [copied, setCopied] = useState(false);
+  const [planMode, setPlanMode] = useState(false);
+  
   const handleCopy = useCallback(() => {
     const text = extractMessageCopyText(message);
     if (!text) return;
@@ -1093,9 +1098,15 @@ function MessageRowView({
   const showThinkingPlaceholder = showAssistantShell && !hasAssistantContent;
   const thinkingVariant = useThinkingVariant(showThinkingPlaceholder);
 
+  const messageId = message?.id ?? "";
+    const handleLoadOutput = async (actionId: string): Promise<void> => {
+      if (!messageId) return;
+      await onLoadActionOutput(messageId, actionId);
+    };
+
   return (
     <div
-      data-message-id={message.id}
+      data-message-id={messageId}
       className="animate-slide-up msg-row"
       style={{
         animationDelay: `${Math.min(index * 20, 200)}ms`,
@@ -1184,13 +1195,14 @@ function MessageRowView({
               padding: "4px 0",
             }}
           >
+
             {hasAssistantContent ? (
               <MessageBlocks
                 blocks={message.blocks}
                 status={message.status}
                 engineId={assistantEngineId}
                 onApproval={onApproval}
-                onLoadActionOutput={(actionId) => onLoadActionOutput(message.id, actionId)}
+                onLoadActionOutput={handleLoadOutput}
               />
             ) : (
               <div
@@ -1314,11 +1326,15 @@ function usagePercentToWidth(percent: number | null): string {
 }
 
 export function ChatPanel() {
+  const activeThreadId = useThreadStore((s) => s.activeThreadId);
+  const safe = (val: any) => val ?? null;
+  const safeArray = (arr: any[]) =>
+    Array.isArray(arr) ? arr.filter(Boolean) : [];
   const { t } = useTranslation("chat");
   const renderStartedAtRef = useRef(performance.now());
   renderStartedAtRef.current = performance.now();
-
   const [input, setInput] = useState("");
+  const [isSending, setIsSending] = useState(false);
   const inputHistoryRef = useRef<string[]>([]);
   const inputHistCursorRef = useRef(-1);
   const inputLiveDraftRef = useRef("");
@@ -1332,8 +1348,7 @@ export function ChatPanel() {
   const [commandPanelBusy, setCommandPanelBusy] = useState(false);
   const [commandPanelError, setCommandPanelError] = useState<string | null>(null);
   const commandPanelBusyRef = useRef(false);
-  // runtimePickerOpenSection removed — runtime info panels are inline slash command panels
-  const [selectedEngineId, setSelectedEngineId] = useState("codex");
+  const [selectedEngineId, setSelectedEngineId] = useState<string>("");
   const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
   const [selectedEffort, setSelectedEffort] = useState("medium");
   const selectedEngineIdRef = useRef(selectedEngineId);
@@ -1358,10 +1373,10 @@ export function ChatPanel() {
   const {
     messages,
     status,
+    send, 
     hasOlderMessages,
     loadingOlderMessages,
     loadOlderMessages,
-    send,
     steer,
     cancel,
     respondApproval,
@@ -1373,7 +1388,7 @@ export function ChatPanel() {
     threadId,
   } = useChatStore(
     useShallow((state) => ({
-      messages: state.messages,
+      messages: state.messages ?? [],
       status: state.status,
       hasOlderMessages: state.hasOlderMessages,
       loadingOlderMessages: state.loadingOlderMessages,
@@ -1390,11 +1405,12 @@ export function ChatPanel() {
       threadId: state.threadId,
     })),
   );
+  const safeMessages = Array.isArray(messages) ? messages : [];
   const messageFocusTarget = useUiStore((s) => s.messageFocusTarget);
   const clearMessageFocusTarget = useUiStore((s) => s.clearMessageFocusTarget);
   const focusMode = useUiStore((s) => s.focusMode);
   const showSidebar = useUiStore((s) => s.showSidebar);
-
+  
   const isMac = isMacDesktop();
   const customWindowFrame = usesCustomWindowFrame();
   const useTitlebarSafeInset = isMac && focusMode && !showSidebar;
@@ -1421,11 +1437,13 @@ export function ChatPanel() {
     setAllReposTrustLevel,
   } = useWorkspaceStore(
     useShallow((state) => ({
-      repos: state.repos,
+      repos: state.repos ?? [],
       activeWorkspaceId: state.activeWorkspaceId,
       activeWorkspace:
-        state.workspaces.find((workspace) => workspace.id === state.activeWorkspaceId) ?? null,
-      activeRepo: state.repos.find((repo) => repo.id === state.activeRepoId) ?? null,
+        safeArray(state.workspaces).find((workspace) => workspace.id === state.activeWorkspaceId) ?? null,
+      activeRepo: safeArray(state.repos).find(
+        (repo) => repo.id === state.activeRepoId
+      ) ?? null,
       setRepoTrustLevel: state.setRepoTrustLevel,
       setAllReposTrustLevel: state.setAllReposTrustLevel,
     })),
@@ -1445,7 +1463,9 @@ export function ChatPanel() {
     renameThread,
   } = useThreadStore(
     useShallow((state) => ({
-      activeThread: state.threads.find((thread) => thread.id === state.activeThreadId) ?? null,
+      activeThread: safeArray(state.threads).find(
+        (thread) => safe(thread)?.id === state.activeThreadId
+      ) || null,
       createThread: state.createThread,
       forkCodexThread: state.forkCodexThread,
       rollbackCodexThread: state.rollbackCodexThread,
@@ -1516,6 +1536,32 @@ export function ChatPanel() {
     customApprovalPolicyText: string;
   } | null>(null);
 
+  async function sendChatMessage(options: {
+    threadId: string;
+    text: string;
+    engineId: string;
+    modelId: string | null;
+    reasoningEffort?: string | null;
+    attachments?: ChatAttachment[];
+    inputItems?: ChatInputItem[] | null;
+    planMode?: boolean;
+  }): Promise<boolean> {
+    const text = options.text.trim();
+    if (!text) {
+      return false;
+    }
+
+    return send(text, {
+      threadIdOverride: options.threadId,
+      engineId: options.engineId,
+      modelId: options.modelId,
+      reasoningEffort: options.reasoningEffort ?? null,
+      attachments: options.attachments?.length ? options.attachments : undefined,
+      inputItems: options.inputItems?.length ? options.inputItems : undefined,
+      planMode: options.planMode,
+    });
+  }
+
   const trustLevelOptions = useMemo(() => getTrustLevelOptions(t), [t]);
   const codexThreadApprovalPolicyOptions = useMemo(
     () => getCodexThreadApprovalPolicyOptions(t),
@@ -1534,17 +1580,17 @@ export function ChatPanel() {
     [t],
   );
 
+
+  const safeEngines = safeArray(engines);
+
   const selectedEngine = useMemo(
-    () => engines.find((engine) => engine.id === selectedEngineId) ?? engines[0] ?? null,
-    [engines, selectedEngineId],
+    () => safeEngines.find((engine) => engine.id === selectedEngineId) || safeEngines[0] || null,
+    [safeEngines, selectedEngineId],
   );
 
   const availableModels = useMemo(() => selectedEngine?.models ?? [], [selectedEngine]);
 
-  const activeModels = useMemo(
-    () => availableModels.filter((m) => !m.hidden),
-    [availableModels],
-  );
+  const activeModels = availableModels;
   const codexReferenceRoot = activeRepo?.path ?? activeWorkspace?.rootPath ?? null;
 
   const legacyModels = useMemo(
@@ -1554,11 +1600,11 @@ export function ChatPanel() {
 
   // All models from other engines, grouped by engine name
   const otherEngineGroups = useMemo(() => {
-    return engines
+    return safeArray(engines)
       .filter((e) => e.id !== selectedEngineId)
         .map((engine) => ({
           label: engine.name,
-          options: engine.models
+          options: safeArray(engine.models)
             .filter((m) => !m.hidden)
             .map((model) => ({
               value: encodeModelOptionValue(engine.id, model.id),
@@ -1569,9 +1615,10 @@ export function ChatPanel() {
   }, [engines, selectedEngineId, t]);
 
   const selectedModel = useMemo(
-    () => availableModels.find((model) => model.id === selectedModelId) ?? availableModels[0] ?? null,
+    () => safeArray(availableModels).find((model) => model.id === selectedModelId) ?? safeArray(availableModels)[0] ?? null,
     [availableModels, selectedModelId],
   );
+
   const selectedModelSupportsPersonality = selectedEngineId === "codex" &&
     selectedModel?.supportsPersonality === true;
   const codexConfigActiveCount =
@@ -1618,12 +1665,31 @@ export function ChatPanel() {
   ]);
 
   useEffect(() => {
+    if (!selectedModelId && selectedEngine?.models?.length > 0) {
+      setSelectedModelId(selectedEngine.models[0].id);
+    }
+  }, [selectedEngineId]);
+
+  useEffect(() => {
+    if (activeThreadId) {
+      useChatStore.getState().setActiveThread(activeThreadId);
+    }
+  }, [activeThreadId]);
+
+  useEffect(() => {
+    if (!selectedEngineId && safeEngines.length > 0) {
+      setSelectedEngineId(safeEngines[0].id);
+    }
+  }, [safeEngines]);
+
+  useEffect(() => {
     selectedEngineIdRef.current = selectedEngineId;
   }, [selectedEngineId]);
 
   useEffect(() => {
     selectedModelIdRef.current = selectedModelId;
   }, [selectedModelId]);
+
 
   useEffect(() => {
     selectedEffortRef.current = selectedEffort;
@@ -1641,7 +1707,7 @@ export function ChatPanel() {
 
     const activeScopeRepoId = activeRepo?.id ?? null;
     return (
-      activeThread.id === threadId &&
+      safe(activeThread)?.id === threadId &&
       activeThread.workspaceId === activeWorkspaceId &&
       activeThread.repoId === activeScopeRepoId &&
       activeThread.engineId === "codex"
@@ -1675,16 +1741,42 @@ export function ChatPanel() {
       ipc.listCodexSkills(codexReferenceRoot),
       ipc.listCodexApps(),
     ]);
+
     const skillsLoaded = skillsResult.status === "fulfilled";
     const appsLoaded = appsResult.status === "fulfilled";
+
+    // ✅ SAFE ARRAY CHECK
     const skills =
-      skillsResult.status === "fulfilled"
-        ? skillsResult.value.filter((skill) => skill.enabled)
+      skillsResult.status === "fulfilled" &&
+      Array.isArray(skillsResult.value)
+        ? skillsResult.value.filter((s: any) => s?.enabled)
         : [];
+
     const apps =
-      appsResult.status === "fulfilled"
-        ? appsResult.value.filter((app) => app.isEnabled && app.isAccessible)
+      appsResult.status === "fulfilled" &&
+      Array.isArray(appsResult.value)
+        ? appsResult.value.filter(
+            (app: any) => app?.isEnabled && app?.isAccessible
+          )
         : [];
+
+        if (!skillsLoaded && !appsLoaded) {
+          console.warn("⚠️ Running in MOCK mode — skipping Codex catalog");
+
+          setCodexSkills([]);
+          setCodexApps([]);
+          setCodexReferenceCatalogState({
+            skillsLoaded: true,
+            appsLoaded: true,
+          });
+
+          return {
+            skills: [],
+            apps: [],
+            skillsLoaded: true,
+            appsLoaded: true,
+          };
+        }
 
     return {
       skills,
@@ -1759,7 +1851,7 @@ export function ChatPanel() {
       return null;
     }
 
-    const engine = engines.find((candidate) => candidate.id === engineId) ?? null;
+    const engine = safeArray(engines).find((candidate) => candidate.id === engineId) ?? null;
     const model = engine?.models.find((candidate) => candidate.id === modelId) ?? null;
 
     return {
@@ -1775,7 +1867,7 @@ export function ChatPanel() {
         ? message.turnEngineId.trim()
         : activeThread?.engineId ?? selectedEngineId;
     const engineInfo =
-      engines.find((engine) => engine.id === messageEngineId) ?? selectedEngine ?? null;
+      safeArray(engines).find((engine) => engine.id === messageEngineId) ?? selectedEngine ?? null;
     const messageModelId =
       typeof message.turnModelId === "string" && message.turnModelId.trim()
         ? message.turnModelId.trim()
@@ -1810,7 +1902,7 @@ export function ChatPanel() {
   const activeThreadEngineInfo = useMemo(
     () =>
       activeThread?.engineId
-        ? engines.find((engine) => engine.id === activeThread.engineId) ?? null
+        ? safeArray(engines).find((engine) => engine.id === activeThread.engineId) ?? null
         : null,
     [activeThread?.engineId, engines],
   );
@@ -1900,7 +1992,8 @@ export function ChatPanel() {
     const approvals: ApprovalBlock[] = [];
     const seen = new Set<string>();
 
-    for (const message of messages) {
+    for (const message of safeMessages) {
+      if (!safe(message)?.id) continue;
       if (message.role !== "assistant") continue;
       for (const block of message.blocks ?? []) {
         if (block.type !== "approval") continue;
@@ -1912,9 +2005,16 @@ export function ChatPanel() {
     }
 
     return approvals;
-  }, [messages]);
+  }, [safeMessages]);
   const [selectedPendingToolInputApprovalId, setSelectedPendingToolInputApprovalId] =
     useState<string | null>(null);
+
+    useEffect(() => {
+      const el = viewportRef.current;
+      if (!el) return;
+
+      el.scrollTop = el.scrollHeight;
+    }, [safeMessages]);
 
   const pendingToolInputApproval = useMemo(
     () =>
@@ -1979,8 +2079,8 @@ export function ChatPanel() {
       const promptThread =
         useThreadStore
           .getState()
-          .threads.find((thread) => thread.id === promptThreadId) ??
-        (activeThread?.id === promptThreadId ? activeThread : null);
+          .threads.find((thread) => thread?.id === promptThreadId) ??
+        (safe(activeThread)?.id === promptThreadId ? activeThread : null);
       if (!promptThread) {
         pendingPlanImplementationThreadIdRef.current = null;
         return;
@@ -2297,10 +2397,10 @@ export function ChatPanel() {
   useEffect(() => {
     messageHeightsRef.current.clear();
     scheduleListLayoutVersionBump();
-  }, [activeThread?.id, scheduleListLayoutVersionBump]);
+  }, [safe(activeThread)?.id, scheduleListLayoutVersionBump]);
 
   useEffect(() => {
-    const existingIds = new Set(messages.map((message) => message.id));
+    const existingIds = new Set(safeMessages.map((message) => safe(message)?.id));
     let changed = false;
     for (const messageId of messageHeightsRef.current.keys()) {
       if (!existingIds.has(messageId)) {
@@ -2317,7 +2417,7 @@ export function ChatPanel() {
     if (!editingThreadTitle) {
       setThreadTitleDraft(activeThread?.title ?? "");
     }
-  }, [activeThread?.id, activeThread?.title, editingThreadTitle]);
+  }, [safe(activeThread)?.id, activeThread?.title, editingThreadTitle]);
 
   useEffect(() => {
     if (!editingThreadTitle) {
@@ -2328,10 +2428,10 @@ export function ChatPanel() {
   }, [editingThreadTitle]);
 
   useEffect(() => {
-    if (!engines.length) {
+    if (!safeArray(engines).length) {
       return;
     }
-    if (!engines.some((engine) => engine.id === selectedEngineId)) {
+    if (!safeArray(engines).some((engine) => engine.id === selectedEngineId)) {
       setSelectedEngineId(engines[0].id);
     }
   }, [engines, selectedEngineId]);
@@ -2365,7 +2465,7 @@ export function ChatPanel() {
   }, [selectedModel, selectedModelId]);
 
   useEffect(() => {
-    if (!activeWorkspaceId || engines.length === 0) {
+    if (!activeWorkspaceId || safeArray(engines).length === 0) {
       return;
     }
 
@@ -2378,7 +2478,7 @@ export function ChatPanel() {
     }
 
     for (const engineId of engineIds) {
-      if (!engines.some((engine) => engine.id === engineId) || health[engineId]) {
+      if (!safeArray(engines).some((engine) => engine.id === engineId) || health[engineId]) {
         continue;
       }
       void ensureEngineHealth(engineId);
@@ -2393,7 +2493,7 @@ export function ChatPanel() {
   ]);
 
   useEffect(() => {
-    if (!activeWorkspaceId || engines.length === 0) {
+    if (!activeWorkspaceId || safeArray(engines).length === 0) {
       return;
     }
 
@@ -2406,7 +2506,7 @@ export function ChatPanel() {
     }
 
     const cancelers = Array.from(engineIds)
-      .filter((engineId) => engines.some((engine) => engine.id === engineId))
+      .filter((engineId) => safeArray(engines).some((engine) => engine.id === engineId))
       .map((engineId) =>
         scheduleIdleTask(() => {
           void prewarmEngineTransport(engineId);
@@ -2508,7 +2608,7 @@ export function ChatPanel() {
       return;
     }
 
-    const syncKey = `${activeThread?.id ?? "none"}:${selectedModel.id}`;
+    const syncKey = `${safe(activeThread)?.id ?? "none"}:${selectedModel.id}`;
     if (effortSyncKeyRef.current === syncKey) {
       return;
     }
@@ -2523,7 +2623,7 @@ export function ChatPanel() {
       setSelectedEffort(nextEffort);
     }
   }, [
-    activeThread?.id,
+    safe(activeThread)?.id,
     activeThreadReasoningEffort,
     selectedModel?.id,
     selectedModel?.defaultReasoningEffort,
@@ -2588,7 +2688,7 @@ export function ChatPanel() {
     setSelectedServiceTier(readThreadServiceTierValue(activeThread));
     setOutputSchemaText(readThreadOutputSchemaText(activeThread));
     setCustomApprovalPolicyText(readCodexThreadCustomApprovalPolicyText(activeThread));
-  }, [activeThread?.engineId, activeThread?.id, activeThread?.engineMetadata]);
+  }, [activeThread?.engineId, safe(activeThread)?.id, activeThread?.engineMetadata]);
 
   useEffect(() => {
     if (!activeThread) {
@@ -2596,18 +2696,19 @@ export function ChatPanel() {
       manuallyOverrodeThreadSelectionRef.current = false;
       return;
     }
-    const threadChanged = lastSyncedThreadIdRef.current !== activeThread.id;
+    const threadChanged = lastSyncedThreadIdRef.current !== safe(activeThread)?.id;
     if (!threadChanged && manuallyOverrodeThreadSelectionRef.current) {
       return;
     }
-    lastSyncedThreadIdRef.current = activeThread.id;
+    lastSyncedThreadIdRef.current = safe(activeThread)?.id;
     manuallyOverrodeThreadSelectionRef.current = false;
     setHasExplicitComposerRuntime(false);
-    if (activeThread.engineId !== selectedEngineId) {
-      setSelectedEngineId(activeThread.engineId);
-    }
     const threadEngine =
-      engines.find((engine) => engine.id === activeThread.engineId) ?? null;
+      safeArray(engines).find((engine) => engine.id === activeThread.engineId) ?? null;
+    const nextEngine = threadEngine ?? safeArray(engines)[0] ?? null;
+    if (nextEngine && nextEngine.id !== selectedEngineId) {
+      setSelectedEngineId(nextEngine.id);
+    }
     const lastModelId =
       typeof activeThread.engineMetadata?.lastModelId === "string"
         ? activeThread.engineMetadata.lastModelId
@@ -2621,9 +2722,11 @@ export function ChatPanel() {
       setSelectedModelId(preferredModelId);
     } else if (threadModelExists) {
       setSelectedModelId(activeThread.modelId);
+    } else if (nextEngine?.models[0]?.id) {
+      setSelectedModelId(nextEngine.models[0].id);
     }
   }, [
-    activeThread?.id,
+    safe(activeThread)?.id,
     activeThread?.engineId,
     activeThread?.modelId,
     activeThread?.engineMetadata,
@@ -2644,7 +2747,7 @@ export function ChatPanel() {
       activeThread &&
       activeThread.workspaceId === activeWorkspaceId;
 
-    const targetThreadId = activeThreadInCurrentWorkspace ? activeThread.id : null;
+    const targetThreadId = activeThreadInCurrentWorkspace ? safe(activeThread)?.id : null;
     if (targetThreadId === threadId) {
       return;
     }
@@ -2655,7 +2758,7 @@ export function ChatPanel() {
     void bindChatThread(targetThreadId);
   }, [
     activeWorkspaceId,
-    activeThread?.id,
+    safe(activeThread)?.id,
     activeThread?.workspaceId,
     threadId,
     bindChatThread,
@@ -2768,8 +2871,8 @@ export function ChatPanel() {
       return;
     }
 
-    const targetIndex = messages.findIndex(
-      (message) => message.id === messageFocusTarget.messageId,
+    const targetIndex = safeMessages.findIndex(
+      (message) => safe(message)?.id === messageFocusTarget.messageId,
     );
     if (targetIndex < 0) {
       if (hasOlderMessages && !loadingOlderMessages && !prependLoadInFlightRef.current) {
@@ -2846,7 +2949,7 @@ export function ChatPanel() {
 
   useEffect(() => {
     setHighlightedMessageId(null);
-  }, [activeThread?.id]);
+  }, [safe(activeThread)?.id]);
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -2926,19 +3029,23 @@ export function ChatPanel() {
 
     try {
       if (patch.updatePersonality || patch.updateServiceTier || patch.updateOutputSchema) {
-        const updatedThread = await ipc.setThreadCodexConfig(activeThread.id, {
+        const updatedThread = await ipc.setThreadCodexConfig(safe(activeThread)?.id, {
           personality: patch.updatePersonality ? patch.personality : undefined,
           serviceTier: patch.updateServiceTier ? patch.serviceTier : undefined,
           outputSchema: patch.updateOutputSchema ? patch.outputSchema : undefined,
         });
-        applyThreadUpdateLocal(updatedThread);
+        if (updatedThread) {
+          
+        }
       }
 
       if (patch.updateApprovalPolicy) {
-        const updatedThread = await ipc.setThreadExecutionPolicy(activeThread.id, {
+        const updatedThread = await ipc.setThreadExecutionPolicy(safe(activeThread)?.id, {
           approvalPolicy: patch.approvalPolicy,
         });
-        applyThreadUpdateLocal(updatedThread);
+        if (updatedThread) {
+          
+        }
       }
 
       applyLocalState();
@@ -2990,10 +3097,12 @@ export function ChatPanel() {
           effectiveConfig.serviceTier === "inherit" ? null : effectiveConfig.serviceTier,
         outputSchema: outputSchemaDraft.value,
       });
-      applyThreadUpdateLocal(updatedConfigThread);
+      if (updatedConfigThread) {
+        
+      }
 
       const latestThread =
-        useThreadStore.getState().threads.find((thread) => thread.id === targetThreadId) ??
+        useThreadStore.getState().threads.find((thread) => safe(thread)?.id === targetThreadId) ??
         updatedConfigThread;
       const approvalMode = readCodexThreadApprovalPolicyValue(latestThread);
 
@@ -3001,12 +3110,16 @@ export function ChatPanel() {
         const updatedThread = await ipc.setThreadExecutionPolicy(targetThreadId, {
           approvalPolicy: customApprovalDraft.value,
         });
-        applyThreadUpdateLocal(updatedThread);
+        if (updatedThread) {
+         
+        }
       } else if (approvalMode === "custom") {
         const updatedThread = await ipc.setThreadExecutionPolicy(targetThreadId, {
           approvalPolicy: null,
         });
-        applyThreadUpdateLocal(updatedThread);
+        if (updatedThread) {
+          
+        }
       }
 
       return true;
@@ -3023,13 +3136,13 @@ export function ChatPanel() {
       throw new Error(t("panel.toasts.codexThreadToolUnavailable"));
     }
 
-    const forkedThread = await forkCodexThread(activeThread.id);
+    const forkedThread = await forkCodexThread(safe(activeThread)?.id);
     if (!forkedThread) {
       throw new Error(t("panel.toasts.codexThreadForkFailed"));
     }
 
-    setActiveThreadInStore(forkedThread.id);
-    await bindChatThread(forkedThread.id);
+    setActiveThreadInStore(forkedThread?.id);
+    await bindChatThread(forkedThread?.id);
     toast.success(t("panel.toasts.codexThreadForked"));
   }
 
@@ -3046,14 +3159,16 @@ export function ChatPanel() {
     }
 
     const reviewThread = await ipc.startCodexReview(
-      activeThread.id,
+      safe(activeThread)?.id,
       request.target,
       request.delivery,
     );
 
-    await refreshThreads(reviewThread.workspaceId);
-    setActiveThreadInStore(reviewThread.id);
-    await bindChatThread(reviewThread.id);
+    if (reviewThread) {
+      
+      setActiveThreadInStore(reviewThread.id);
+      await bindChatThread(reviewThread.id);
+    }
     toast.success(
       t(
         request.delivery === "detached"
@@ -3068,7 +3183,7 @@ export function ChatPanel() {
       throw new Error(t("panel.toasts.codexThreadToolUnavailable"));
     }
 
-    const rolledBackThread = await rollbackCodexThread(activeThread.id, numTurns);
+    const rolledBackThread = await rollbackCodexThread(safe(activeThread)?.id, numTurns);
     if (!rolledBackThread) {
       throw new Error(t("panel.toasts.codexThreadRollbackFailed"));
     }
@@ -3083,7 +3198,7 @@ export function ChatPanel() {
       throw new Error(t("panel.toasts.codexThreadToolUnavailable"));
     }
 
-    const compactedThread = await compactCodexThread(activeThread.id);
+    const compactedThread = await compactCodexThread(safe(activeThread)?.id);
     if (!compactedThread) {
       throw new Error(t("panel.toasts.codexThreadCompactFailed"));
     }
@@ -3337,7 +3452,7 @@ export function ChatPanel() {
         return;
       }
 
-      const activeThreadId = threadId ?? activeThread?.id ?? null;
+      const activeThreadId = threadId ?? safe(activeThread)?.id ?? null;
       if (!activeThreadId) {
         return;
       }
@@ -3420,7 +3535,7 @@ export function ChatPanel() {
     const inputItems = await resolveCodexInputItems(text, submitEngineId);
 
     const currentThread =
-      useThreadStore.getState().threads.find((thread) => thread.id === targetThreadId) ??
+      useThreadStore.getState().threads.find((thread) => safe(thread)?.id === targetThreadId) ??
       activeThread;
 
     if (
@@ -3470,29 +3585,67 @@ export function ChatPanel() {
     }
     setThreadLastModelLocal(targetThreadId, submitModelId);
 
-    const sent = await send(text, {
-      threadIdOverride: targetThreadId,
-      engineId: submitEngineId,
-      modelId: submitModelId,
-      reasoningEffort: submitReasoningEffort,
-      attachments: currentAttachments.length > 0 ? currentAttachments : undefined,
-      inputItems,
-      planMode,
-    });
-    if (sent) {
-      pendingPlanImplementationThreadIdRef.current = planMode ? targetThreadId : null;
-      const trimmed = input.trim();
-      if (trimmed) {
-        const hist = inputHistoryRef.current;
-        if (hist[0] !== trimmed) {
-          inputHistoryRef.current = [trimmed, ...hist].slice(0, 50);
+    setIsSending(true);
+
+    try {
+      const sent = await sendChatMessage({
+        threadId: targetThreadId,
+        text,
+        engineId: submitEngineId,
+        modelId: submitModelId,
+        reasoningEffort: submitReasoningEffort,
+        attachments: currentAttachments,
+        inputItems,
+        planMode,
+      });
+
+      if (sent) {
+        pendingPlanImplementationThreadIdRef.current = planMode ? targetThreadId : null;
+
+        const trimmed = input.trim();
+        if (trimmed) {
+          const hist = inputHistoryRef.current;
+          if (hist[0] !== trimmed) {
+            inputHistoryRef.current = [trimmed, ...hist].slice(0, 50);
+          }
         }
+
+        inputHistCursorRef.current = -1;
+        inputLiveDraftRef.current = "";
+        setInput("");
+        setAttachments([]);
       }
-      inputHistCursorRef.current = -1;
-      inputLiveDraftRef.current = "";
-      setInput("");
-      setAttachments([]);
-    }
+
+    } catch (e) {
+      console.error("SEND ERROR:", e);
+
+      const sent = await sendChatMessage({
+        threadId,
+        text: input,
+        engineId: selectedEngineId,
+        modelId: selectedModelId,
+      });
+
+      if (sent) {
+        useChatStore.setState((state: any) => ({
+          messages: [
+            ...(state.messages ?? []),
+            {
+              id: crypto.randomUUID(),
+              role: "assistant",
+              blocks: [
+                {
+                  type: "text",
+                  content: "⚠️ Something went wrong",
+                },
+              ],
+              status: "completed",
+              createdAt: new Date().toISOString(),
+            },
+          ],
+        }));
+      }
+    }  
   }
 
   async function executeWorkspaceOptInSend() {
@@ -3518,13 +3671,14 @@ export function ChatPanel() {
       }
       setThreadLastModelLocal(prompt.threadId, prompt.modelId);
 
-      const sent = await send(prompt.text, {
-        threadIdOverride: prompt.threadId,
+      const sent = await sendChatMessage({
+        threadId: prompt.threadId,
+        text: prompt.text,
         engineId: prompt.engineId,
         modelId: prompt.modelId,
         reasoningEffort: prompt.effort,
-        attachments: prompt.attachments.length > 0 ? prompt.attachments : undefined,
-        inputItems: prompt.inputItems ?? undefined,
+        attachments: prompt.attachments,
+        inputItems: prompt.inputItems,
         planMode: prompt.planMode,
       });
       if (!sent) {
@@ -3537,7 +3691,7 @@ export function ChatPanel() {
       setInput("");
       setAttachments([]);
 
-      await refreshThreads(prompt.workspaceId);
+      
     } catch {
       setInput(prompt.text);
       setAttachments(prompt.attachments);
@@ -3552,8 +3706,8 @@ export function ChatPanel() {
     const implementationMessage = getPlanImplementationCodingMessage(prompt.engineId);
 
     const currentThread =
-      useThreadStore.getState().threads.find((thread) => thread.id === prompt.threadId) ??
-      (activeThread?.id === prompt.threadId ? activeThread : null);
+      useThreadStore.getState().threads.find((thread) => safe(thread)?.id === prompt.threadId) ??
+      (safe(activeThread)?.id === prompt.threadId ? activeThread : null);
     if (!currentThread) {
       toast.error(t("panel.toasts.planImplementationThreadUnavailable"));
       return;
@@ -3616,8 +3770,9 @@ export function ChatPanel() {
       }
       setThreadLastModelLocal(currentThread.id, prompt.modelId);
 
-      const sent = await send(implementationMessage, {
-        threadIdOverride: currentThread.id,
+      const sent = await sendChatMessage({
+        threadId: currentThread.id,
+        text: implementationMessage,
         engineId: prompt.engineId,
         modelId: prompt.modelId,
         reasoningEffort: prompt.effort,
@@ -3663,7 +3818,7 @@ export function ChatPanel() {
     setHasExplicitComposerRuntime(true);
     selectedEffortRef.current = nextEffort;
     setSelectedEffort(nextEffort);
-    const targetThreadId = threadId ?? activeThread?.id ?? null;
+    const targetThreadId = threadId ?? safe(activeThread)?.id ?? null;
     if (!targetThreadId) {
       return;
     }
@@ -3694,7 +3849,7 @@ export function ChatPanel() {
     }
 
     const currentThread =
-      useThreadStore.getState().threads.find((thread) => thread.id === activeThread.id) ??
+      useThreadStore.getState().threads.find((thread) => safe(thread)?.id === safe(activeThread)?.id) ??
       activeThread;
     const isCodexThread = currentThread.engineId === "codex";
     const nextState = {
@@ -3748,7 +3903,7 @@ export function ChatPanel() {
       }
     }
 
-    applyThreadUpdateLocal(applyThreadExecutionPolicyPatch(currentThread, nextPatch));
+    
 
     const requestId =
       (threadExecutionPolicyRequestIdsRef.current[currentThread.id] ?? 0) + 1;
@@ -3761,18 +3916,20 @@ export function ChatPanel() {
       );
 
       if (threadExecutionPolicyRequestIdsRef.current[currentThread.id] !== requestId) {
-        await refreshThreads(currentThread.workspaceId);
+        
         return;
       }
 
-      applyThreadUpdateLocal(updatedThread);
+      if (updatedThread) {
+        
+      }
     } catch (error) {
       if (threadExecutionPolicyRequestIdsRef.current[currentThread.id] !== requestId) {
         return;
       }
 
       toast.error(t("panel.toasts.updateExecutionPolicyFailed", { error: String(error) }));
-      await refreshThreads(currentThread.workspaceId);
+      
     }
   }
 
@@ -3802,7 +3959,7 @@ export function ChatPanel() {
     }
 
     if (normalized !== (activeThread.title ?? "")) {
-      await renameThread(activeThread.id, normalized);
+      await renameThread(safe(activeThread)?.id, normalized);
     }
 
     setEditingThreadTitle(false);
@@ -3975,7 +4132,7 @@ export function ChatPanel() {
       if (message.role !== "assistant") {
         continue;
       }
-      identityByMessageId.set(message.id, renderAssistantIdentity(message));
+      identityByMessageId.set(safe(message)?.id, renderAssistantIdentity(message));
     }
     return identityByMessageId;
   }, [renderAssistantIdentity, visibleMessages]);
@@ -4019,6 +4176,13 @@ export function ChatPanel() {
   useEffect(() => {
     return () => resizeCleanupRef.current?.();
   }, []);
+
+  useEffect(() => {
+    const el = viewportRef.current;
+    if (!el) return;
+
+    el.scrollTop = el.scrollHeight;
+  }, [safeMessages]);
 
   const handleResizeStart = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -4464,17 +4628,17 @@ export function ChatPanel() {
             <div style={{ display: "flex", flexDirection: "column", gap: MESSAGE_ROW_GAP }}>
               {visibleMessages.map((message, relativeIndex) => {
                   const absoluteIndex = virtualWindow.startIndex + relativeIndex;
-                  const assistantIdentity = assistantIdentityByMessageId.get(message.id);
+                  const assistantIdentity = assistantIdentityByMessageId.get(safe(message)?.id);
                   return (
                     <MeasuredMessageRow
-                      key={message.id}
-                      messageId={message.id}
+                      key={safe(message)?.id}
+                      messageId={safe(message)?.id}
                       onHeightChange={onMessageRowHeightChange}
                     >
                       <MessageRow
                         message={message}
                         index={absoluteIndex}
-                        isHighlighted={message.id === highlightedMessageId}
+                        isHighlighted={safe(message)?.id === highlightedMessageId}
                         assistantLabel={assistantIdentity?.label ?? ""}
                         assistantEngineId={assistantIdentity?.engineId ?? ""}
                         onApproval={handleApproval}
@@ -4492,13 +4656,13 @@ export function ChatPanel() {
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: MESSAGE_ROW_GAP }}>
             {visibleMessages.map((message, index) => {
-              const assistantIdentity = assistantIdentityByMessageId.get(message.id);
+              const assistantIdentity = assistantIdentityByMessageId.get(safe(message)?.id);
               return (
                 <MessageRow
-                  key={message.id}
+                  key={safe(message)?.id}
                   message={message}
                   index={index}
-                  isHighlighted={message.id === highlightedMessageId}
+                  isHighlighted={safe(message)?.id === highlightedMessageId}
                   assistantLabel={assistantIdentity?.label ?? ""}
                   assistantEngineId={assistantIdentity?.engineId ?? ""}
                   onApproval={handleApproval}
@@ -4559,14 +4723,7 @@ export function ChatPanel() {
                 borderTop: "1px solid var(--border)",
               }}
             >
-        <form
-          onSubmit={onSubmit}
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            gap: 8,
-          }}
-        >
+        <form onSubmit={onSubmit}>
           {/* Pending approvals */}
           {pendingApprovalBannerRows.length > 0 && (
             <div className="chat-approval-banner">
@@ -4923,6 +5080,7 @@ export function ChatPanel() {
                   />
                 )}
 
+
                 <textarea
                   ref={inputRef}
                   rows={3}
@@ -5003,7 +5161,7 @@ export function ChatPanel() {
                       if (streaming && !canSteerActiveTurn) {
                         return;
                       }
-                      void onSubmit(e);
+                      e.currentTarget.form?.requestSubmit();
                     }
                     if (e.shiftKey && e.key === "Tab") {
                       e.preventDefault();
@@ -5089,68 +5247,6 @@ export function ChatPanel() {
                   <ListChecks size={12} />
                   <span style={{ fontSize: 11 }}>{t("panel.planShort")}</span>
                 </button>
-              )}
-
-              {!showSpecialInputComposer && <div className="chat-toolbar-divider" />}
-
-              {/* Engine + Model + Effort selector */}
-              {!showSpecialInputComposer && (
-                <>
-                  <ModelPicker
-                    engines={engines}
-                    health={health}
-                    selectedEngineId={selectedEngineId}
-                    selectedModelId={selectedModelId ?? selectedModel?.id ?? ""}
-                    selectedEffort={selectedEffort}
-                    onEngineModelChange={(engineId, modelId) => {
-                      manuallyOverrodeThreadSelectionRef.current = true;
-                      setHasExplicitComposerRuntime(true);
-                      selectedEngineIdRef.current = engineId;
-                      if (engineId !== selectedEngineId) setSelectedEngineId(engineId);
-                      const nextEngine =
-                        engines.find((engine) => engine.id === engineId) ?? null;
-                      const nextModel =
-                        nextEngine?.models.find((model) => model.id === modelId) ?? null;
-                      const nextEffort = resolveReasoningEffortForModel(
-                        nextModel,
-                        selectedEffortRef.current,
-                      );
-                      selectedModelIdRef.current = modelId;
-                      setSelectedModelId(modelId);
-                      if (nextEffort && nextEffort !== selectedEffort) {
-                        selectedEffortRef.current = nextEffort;
-                        setSelectedEffort(nextEffort);
-                      }
-                    }}
-                    onEffortChange={(effort) => void onReasoningEffortChange(effort)}
-                    disabled={availableModels.length === 0}
-                  />
-                  {selectedEngineId === "codex" && (
-                    <button
-                      type="button"
-                      className={`chat-toolbar-btn chat-toolbar-btn-bordered chat-toolbar-btn-fast ${selectedServiceTier === "fast" ? "chat-toolbar-btn-fast-active" : ""}`}
-                      onClick={() => {
-                        void onCodexConfigSave({
-                          updatePersonality: false,
-                          personality: null,
-                          updateServiceTier: true,
-                          serviceTier:
-                            selectedServiceTier === "fast" ? null : "fast",
-                          updateOutputSchema: false,
-                          outputSchema: null,
-                          updateApprovalPolicy: false,
-                          approvalPolicy: null,
-                        }).catch((error) => {
-                          toast.error(String(error));
-                        });
-                      }}
-                      title={t("configPicker.serviceTierDescription")}
-                    >
-                      <Zap size={11} />
-                      <span style={{ fontSize: 11 }}>{t("modelPicker.fastOn")}</span>
-                    </button>
-                  )}
-                </>
               )}
 
               {/* Codex Runtime + Config removed from toolbar — accessed via /slash commands */}
@@ -5518,3 +5614,4 @@ export function ChatPanel() {
     </div>
   );
 }
+

@@ -34,7 +34,7 @@ const HARNESSES: &[HarnessDef] = &[
     HarnessDef {
         id: "codex",
         name: "Codex CLI",
-        description: "Natively integrated — powers the Panes chat engine",
+        description: "Natively integrated — powers the BharatTech chat engine",
         command: "codex",
         version_flag: "--version",
         install_command: Some("npm"),

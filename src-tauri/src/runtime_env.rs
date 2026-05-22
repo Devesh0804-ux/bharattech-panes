@@ -277,7 +277,7 @@ fn augmented_path_entries_for(
         entries.push(PathBuf::from("/nix/var/nix/profiles/default/bin"));
         entries.push(PathBuf::from("/run/current-system/sw/bin"));
         // /etc/environment is sourced by PAM/systemd on most distros.
-        // When Panes is launched from a .desktop file (e.g. .deb install),
+        // When BharatTech is launched from a .desktop file (e.g. .deb install),
         // the process PATH is minimal — this fills the gap.
         entries.extend(parse_path_from_env_file(
             Path::new("/etc/environment"),
@@ -615,15 +615,15 @@ fn app_data_dir_for(
 ) -> PathBuf {
     if is_windows {
         if let Some(path) = local_app_data {
-            return path.join("Panes");
+            return path.join("BharatTech");
         }
         if let Some(path) = roaming_app_data {
-            return path.join("Panes");
+            return path.join("BharatTech");
         }
         if let Some(home) = home {
-            return home.join("AppData").join("Local").join("Panes");
+            return home.join("AppData").join("Local").join("BharatTech");
         }
-        return env::temp_dir().join("Panes");
+        return env::temp_dir().join("BharatTech");
     }
 
     home.map(legacy_app_data_dir_for)
@@ -1208,7 +1208,7 @@ mod tests {
             Some(Path::new(r"C:\Users\panes\AppData\Roaming")),
             Some(Path::new(r"C:\Users\panes")),
         );
-        assert_eq!(normalize_path(&path), "C:/Users/panes/AppData/Local/Panes");
+        assert_eq!(normalize_path(&path), "C:/Users/panes/AppData/Local/BharatTech");
     }
 
     #[test]
@@ -1220,7 +1220,7 @@ mod tests {
     #[test]
     fn app_data_dir_for_windows_falls_back_to_absolute_temp_dir() {
         let path = app_data_dir_for(true, None, None, None);
-        assert_eq!(path, std::env::temp_dir().join("Panes"));
+        assert_eq!(path, std::env::temp_dir().join("BharatTech"));
         assert!(path.is_absolute());
     }
 
@@ -1364,7 +1364,7 @@ mod tests {
     #[test]
     fn migrate_legacy_app_data_dir_moves_existing_legacy_tree() {
         let root = std::env::temp_dir().join(format!("panes-app-data-migrate-{}", Uuid::new_v4()));
-        let current = root.join("AppData").join("Local").join("Panes");
+        let current = root.join("AppData").join("Local").join("BharatTech");
         let legacy = root.join(".agent-workspace");
 
         fs::create_dir_all(legacy.join("logs")).expect("legacy app data dir should exist");
@@ -1386,7 +1386,7 @@ mod tests {
     #[test]
     fn migrate_legacy_app_data_dir_preserves_existing_target_data() {
         let root = std::env::temp_dir().join(format!("panes-app-data-preserve-{}", Uuid::new_v4()));
-        let current = root.join("AppData").join("Local").join("Panes");
+        let current = root.join("AppData").join("Local").join("BharatTech");
         let legacy = root.join(".agent-workspace");
 
         fs::create_dir_all(&current).expect("current app data dir should exist");

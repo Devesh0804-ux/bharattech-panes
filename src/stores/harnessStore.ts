@@ -35,9 +35,10 @@ function requestHarnessScan(
   const request = (async () => {
     try {
       const report = await ipc.checkHarnesses();
+
       set({
-        harnesses: report.harnesses,
-        npmAvailable: report.npmAvailable,
+        harnesses: Array.isArray(report?.harnesses) ? report.harnesses : [],
+        npmAvailable: Boolean(report?.npmAvailable),
         phase: "idle",
         error: null,
         loadedOnce: true,
@@ -83,6 +84,7 @@ export const useHarnessStore = create<HarnessStore>((set, get) => ({
 
   getInstalledHarnesses: () => {
     const { harnesses } = get();
-    return harnesses.filter((h) => h.found);
-  },
+    const safe = Array.isArray(harnesses) ? harnesses : [];
+    return safe.filter((h) => h?.found);
+  }
 }));
