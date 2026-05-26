@@ -104,7 +104,7 @@ describe("windowActions", () => {
     }
   });
 
-  it("treats Windows custom chrome as Tauri-only", () => {
+  it("uses native window chrome on Windows", () => {
     const originalNavigator = Object.getOwnPropertyDescriptor(globalThis, "navigator");
 
     Object.defineProperty(globalThis, "navigator", {
@@ -114,7 +114,7 @@ describe("windowActions", () => {
 
     try {
       expect(isWindowsDesktop()).toBe(true);
-      expect(usesCustomWindowFrame()).toBe(true);
+      expect(usesCustomWindowFrame()).toBe(false);
 
       mockIsTauri.mockReturnValue(false);
       expect(isWindowsDesktop()).toBe(false);

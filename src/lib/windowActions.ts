@@ -25,7 +25,7 @@ export function isMacDesktop(): boolean {
 }
 
 export function usesCustomWindowFrame(): boolean {
-  return isLinuxDesktop() || isWindowsDesktop();
+  return isLinuxDesktop();
 }
 
 export function isTerminalInputFocused(doc: Document | undefined = globalThis.document): boolean {
