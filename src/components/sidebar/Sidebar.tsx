@@ -500,7 +500,12 @@ function SidebarContent({ onPin }: { onPin?: () => void }) {
             className={`sb-open-project-btn${activeView === "harnesses" ? " sb-btn-active" : ""}`}
             style={{ margin: 0 }}
             onClick={() => {
-              alert("Agents not available in web mode yet");
+              if (isTauriRuntime()) {
+                setActiveView("harnesses");
+                return;
+              }
+
+              toast.error("Agents are only available in the desktop app.");
             }}
           >
             <Terminal size={13} strokeWidth={2} />
